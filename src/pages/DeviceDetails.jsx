@@ -39,43 +39,43 @@ const DeviceDetails = () => {
     });
 
     const [showMpToken, setShowMpToken] = useState(false);
-    const [logs, setLogs] = useState([
-        { amount: 0, duration: 60, ref: 'TEST_TIME', time: '10:42 AM' },
-        { amount: 500, duration: 120, ref: 'Pago Recibido', time: '10:43 AM' },
-        { amount: 0, duration: 0, ref: 'PowerCycle', time: '09:15 AM' }
-    ]);
+    const [logs, setLogs] = useState([]);
+    const [files, setFiles] = useState([]);
 
     // Sync with device
     useEffect(() => {
         if (status === 'connected' && normalizedUid && !hasRequestedSettings.current) {
-            console.log(`[DeviceDetails] Subscribing to qrsolo/${normalizedUid}/stat/settings`);
-            // 1. Subscribe to settings updates
+            console.log(`[DeviceDetails] Subscribing to qrsolo/${normalizedUid}/stat/#`);
+            // 1. Subscribe to all status topics
             subscribe(`qrsolo/${normalizedUid}/stat/settings`);
-            // 2. Request current settings
-            console.log('[DeviceDetails] Requesting settings for the first time in this session...');
+            subscribe(`qrsolo/${normalizedUid}/stat/status`);
+
+            // 2. Request current data
+            console.log('[DeviceDetails] Requesting full device state...');
             publish(`qrsolo/${normalizedUid}/cmnd/get_settings`, '{}');
+            publish(`qrsolo/${normalizedUid}/cmnd/get_logs`, '{}');
+            publish(`qrsolo/${normalizedUid}/cmnd/list_ads`, '{}');
+
             hasRequestedSettings.current = true;
         }
     }, [status, normalizedUid, subscribe, publish]);
 
-    // Handle incoming messages
+    // Handle settings and status messages
     const settingsTopic = `qrsolo/${normalizedUid}/stat/settings`;
-    const messageForThisTopic = messages[settingsTopic];
+    const statusTopic = `qrsolo/${normalizedUid}/stat/status`;
+    const settingsMsg = messages[settingsTopic];
+    const statusMsg = messages[statusTopic];
 
+    // Settings Handler
     useEffect(() => {
-        if (messageForThisTopic) {
+        if (settingsMsg) {
             try {
-                // Check if the payload is actually different from the last one we processed
-                // to prevent infinite render loops if the broker/device spams the same data.
-                if (lastProcessedMessageRef.current === messageForThisTopic) return;
-                lastProcessedMessageRef.current = messageForThisTopic;
+                if (lastProcessedMessageRef.current === settingsMsg) return;
+                lastProcessedMessageRef.current = settingsMsg;
 
-                const payload = JSON.parse(messageForThisTopic);
-                console.log('--- MQTT DEBUG ---');
-                console.log('Topic:', settingsTopic);
-                console.log('Received Settings Payload:', payload);
+                const payload = JSON.parse(settingsMsg);
+                console.log('--- MQTT SETTINGS ---', payload);
 
-                console.log('Updating state with payload...');
                 setConfig(prev => ({
                     ...prev,
                     devName: payload.devName !== undefined ? payload.devName : prev.devName,
@@ -103,7 +103,44 @@ const DeviceDetails = () => {
                 console.error('Error parsing settings:', e);
             }
         }
-    }, [messageForThisTopic, settingsTopic]);
+    }, [settingsMsg, settingsTopic]);
+
+    // Status / Logs / Files Handler
+    useEffect(() => {
+        if (statusMsg) {
+            console.log('--- MQTT STATUS ---', statusMsg);
+
+            // Check if it's a file list (starts with "Files:")
+            if (statusMsg.startsWith('Files:')) {
+                const fileList = statusMsg.replace('Files:', '').trim().split(',').filter(f => f);
+                setFiles(fileList);
+            }
+            // Check if it's CSV logs (multiple lines or contains commas)
+            else if (statusMsg.includes(',')) {
+                const lines = statusMsg.split('\n');
+                const parsedLogs = lines.map(line => {
+                    const parts = line.split(',');
+                    if (parts.length >= 3) {
+                        return {
+                            time: parts[0],
+                            amount: parseFloat(parts[1]),
+                            duration: parseInt(parts[2]),
+                            ref: parts[3] || 'Evento'
+                        };
+                    }
+                    return null;
+                }).filter(l => l);
+                setLogs(parsedLogs.reverse()); // Show newest first
+            }
+        }
+    }, [statusMsg]);
+
+    const [lastUpdated, setLastUpdated] = useState(null);
+    useEffect(() => {
+        if (settingsMsg) {
+            setLastUpdated(new Date());
+        }
+    }, [settingsMsg]);
 
     const handleChange = (name, value) => {
         setConfig(prev => ({ ...prev, [name]: value }));
@@ -111,16 +148,10 @@ const DeviceDetails = () => {
 
     const handleSaveAll = () => {
         const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
-
-        // Create copy of config to modify payload
         const payload = { ...config };
-
-        // Security: If mpToken is masked (starts with ... or *****), do NOT send it back
-        // This prevents overwriting the real token with the mask.
         if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
             delete payload.mpToken;
         }
-
         publish(topic, JSON.stringify(payload));
         alert('Configuración guardada y enviada.');
     };
@@ -130,20 +161,12 @@ const DeviceDetails = () => {
         alert(`Comando ${cmd} enviado.`);
     };
 
-    // Helper for formatting MP Token
     const formatToken = (token) => {
         if (!token) return '';
         if (showMpToken) return token;
         if (token.length <= 5) return token;
         return `...${token.slice(-5)}`;
     };
-
-    const [lastUpdated, setLastUpdated] = useState(null);
-    useEffect(() => {
-        if (messages[`qrsolo/${uid}/stat/settings`]) {
-            setLastUpdated(new Date());
-        }
-    }, [messages, uid]);
 
     return (
         <div className="min-h-screen bg-[#11161d] text-white pb-20 font-sans">
@@ -352,15 +375,17 @@ const DeviceDetails = () => {
                                     <div className="text-right">Hora</div>
                                 </div>
                                 <div className="divide-y divide-gray-800 max-h-[300px] overflow-y-auto custom-scrollbar">
-                                    {logs.map((log, i) => (
+                                    {logs.length > 0 ? logs.map((log, i) => (
                                         <div key={i} className="grid grid-cols-3 p-3 hover:bg-white/5 transition">
-                                            <span className="text-gray-300">{log.ref === 'Pago Recibido' ? 'Pago Recibido' : 'Evento Sistema'}</span>
+                                            <span className="text-gray-300 text-xs truncate">{log.ref}</span>
                                             <span className={log.amount > 0 ? "text-blue-400 font-bold" : "text-gray-400"}>
-                                                {log.amount > 0 ? `$${log.amount.toFixed(2)}` : log.ref}
+                                                {log.amount > 0 ? `$${log.amount.toFixed(2)}` : '-'}
                                             </span>
-                                            <div className="text-right text-gray-500">{log.time}</div>
+                                            <div className="text-right text-gray-500 text-[10px]">{log.time}</div>
                                         </div>
-                                    ))}
+                                    )) : (
+                                        <div className="p-10 text-center text-gray-500 italic">No hay registros disponibles</div>
+                                    )}
                                 </div>
                                 <div className="p-3 text-center border-t border-gray-800">
                                     <button className="text-blue-400 text-xs font-bold hover:text-blue-300">Ver todos los logs</button>
@@ -371,12 +396,24 @@ const DeviceDetails = () => {
                         {/* PUBLICIDAD */}
                         <Section title="PUBLICIDAD (PANTALLA)">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="aspect-video bg-[#1a202a] rounded-xl border border-gray-700 flex flex-col items-center justify-center relative overflow-hidden group">
-                                    <div className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded flex items-center justify-center text-xs shadow-md z-10 cursor-pointer hover:bg-red-600 transition">x</div>
-                                    <div className="w-12 h-16 bg-blue-500/20 border border-blue-500/30 rounded mb-2"></div>
-                                    <p className="text-[10px] text-gray-400">promo_verano.jpg</p>
-                                </div>
-                                <div className="aspect-video bg-[#1a202a] rounded-xl border border-dashed border-gray-700 flex flex-col items-center justify-center hover:bg-white/5 cursor-pointer transition">
+                                {files.length > 0 ? files.map((file, i) => (
+                                    <div key={i} className="aspect-video bg-[#1a202a] rounded-xl border border-gray-700 flex flex-col items-center justify-center relative overflow-hidden group">
+                                        <div
+                                            onClick={() => sendCommand('delete_ad', file)}
+                                            className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded flex items-center justify-center text-xs shadow-md z-10 cursor-pointer hover:bg-red-600 transition"
+                                        >x</div>
+                                        <div className="w-12 h-16 bg-blue-500/20 border border-blue-500/30 rounded mb-2 flex items-center justify-center">
+                                            <ImageIcon size={20} className="text-blue-500/50" />
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 px-2 truncate w-full text-center">{file}</p>
+                                    </div>
+                                )) : (
+                                    <div className="col-span-2 p-6 text-center text-gray-600 italic border border-dashed border-gray-800 rounded-xl bg-black/10">
+                                        No hay archivos en la SD
+                                    </div>
+                                )}
+                                <div className="aspect-video bg-[#1a202a] rounded-xl border border-dashed border-gray-700 flex flex-col items-center justify-center hover:bg-white/5 cursor-pointer transition"
+                                    onClick={() => alert('Próximamente: Subida directa vía HTTP')}>
                                     <ImageIcon className="text-gray-500 mb-2" />
                                     <p className="text-[10px] text-gray-500">Subir Archivo</p>
                                 </div>
