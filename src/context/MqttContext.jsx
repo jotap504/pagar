@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import mqtt from 'mqtt';
 
 const MqttContext = createContext();
@@ -18,7 +18,7 @@ export const MqttProvider = ({ children }) => {
     // Path: /mqtt
     const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 
-    const connect = (brokerUrl = BROKER_URL) => {
+    const connect = useCallback((brokerUrl = BROKER_URL) => {
         if (clientRef.current?.connected) return;
 
         setStatus('connecting');
@@ -56,21 +56,21 @@ export const MqttProvider = ({ children }) => {
                 [topic]: msg
             }));
         });
-    };
+    }, []);
 
-    const publish = (topic, message) => {
+    const publish = useCallback((topic, message) => {
         if (clientRef.current?.connected) {
             clientRef.current.publish(topic, message);
             return true;
         }
         return false;
-    };
+    }, []);
 
-    const subscribe = (topic) => {
+    const subscribe = useCallback((topic) => {
         if (clientRef.current?.connected) {
             clientRef.current.subscribe(topic);
         }
-    };
+    }, []);
 
     useEffect(() => {
         return () => {

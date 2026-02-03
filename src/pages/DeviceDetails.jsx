@@ -59,29 +59,29 @@ const DeviceDetails = () => {
                 console.log('Topic:', settingsTopic);
                 console.log('Received Settings Payload:', payload);
 
+                console.log('Updating state with payload...');
                 setConfig(prev => ({
                     ...prev,
                     devName: payload.devName !== undefined ? payload.devName : prev.devName,
-                    price: payload.price || prev.price,
+                    price: payload.price !== undefined ? payload.price : prev.price,
                     mode: payload.mode !== undefined ? payload.mode : prev.mode,
-                    pulseDur: payload.pulseDur || prev.pulseDur,
+                    pulseDur: payload.pulseDur !== undefined ? payload.pulseDur : prev.pulseDur,
 
-                    fixedUnits: payload.fixedUnits || prev.fixedUnits,
+                    fixedUnits: payload.fixedUnits !== undefined ? payload.fixedUnits : prev.fixedUnits,
                     fixedModeType: payload.fixedType !== undefined ? payload.fixedType : prev.fixedModeType,
-                    staticQrText: payload.staticQrText || prev.staticQrText,
+                    staticQrText: payload.staticQrText !== undefined ? payload.staticQrText : prev.staticQrText,
 
                     promoEnabled: payload.promoEn !== undefined ? payload.promoEn : prev.promoEnabled,
-                    promoThreshold: payload.promoThr || prev.promoThreshold,
-                    promoDiscount: payload.promoVal || prev.promoDiscount,
+                    promoThreshold: payload.promoThr !== undefined ? payload.promoThr : prev.promoThreshold,
+                    promoDiscount: payload.promoVal !== undefined ? payload.promoVal : prev.promoDiscount,
 
                     audioEnabled: payload.sound !== undefined ? payload.sound : prev.audioEnabled,
-                    volume: payload.vol || prev.volume,
+                    volume: payload.vol !== undefined ? payload.vol : prev.volume,
 
-                    wifiSsid: payload.wifiSsid || prev.wifiSsid,
-                    // wifiPass: payload.wifiPass, // Often not sent back for security
-                    mpToken: payload.mpToken || prev.mpToken,
-                    googleScriptUrl: payload.googleUrl || prev.googleScriptUrl,
-                    manifestUrl: payload.fwUrl || prev.manifestUrl
+                    wifiSsid: payload.wifiSsid !== undefined ? payload.wifiSsid : prev.wifiSsid,
+                    mpToken: payload.mpToken !== undefined ? payload.mpToken : prev.mpToken,
+                    googleScriptUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleScriptUrl,
+                    manifestUrl: payload.fwUrl !== undefined ? payload.fwUrl : prev.manifestUrl
                 }));
             } catch (e) {
                 console.error('Error parsing settings:', e);
