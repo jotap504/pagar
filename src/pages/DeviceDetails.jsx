@@ -9,6 +9,7 @@ const DeviceDetails = () => {
     const normalizedUid = uid?.toUpperCase();
     const { publish, subscribe, messages, status } = useMqtt();
     const hasRequestedSettings = useRef(false);
+    const lastProcessedMessageRef = useRef('');
 
     useEffect(() => {
         console.log('[DeviceDetails] Mounted');
@@ -55,11 +56,6 @@ const DeviceDetails = () => {
             publish(`qrsolo/${normalizedUid}/cmnd/get_settings`, '{}');
             hasRequestedSettings.current = true;
         }
-
-        // Reset the ref if we disconnect, so we request again on reconnect
-        if (status === 'disconnected') {
-            hasRequestedSettings.current = false;
-        }
     }, [status, normalizedUid, subscribe, publish]);
 
     // Handle incoming messages
@@ -71,8 +67,8 @@ const DeviceDetails = () => {
             try {
                 // Check if the payload is actually different from the last one we processed
                 // to prevent infinite render loops if the broker/device spams the same data.
-                if (window._lastMqttPayload === messageForThisTopic) return;
-                window._lastMqttPayload = messageForThisTopic;
+                if (lastProcessedMessageRef.current === messageForThisTopic) return;
+                lastProcessedMessageRef.current = messageForThisTopic;
 
                 const payload = JSON.parse(messageForThisTopic);
                 console.log('--- MQTT DEBUG ---');
