@@ -69,6 +69,11 @@ const DeviceDetails = () => {
     useEffect(() => {
         if (messageForThisTopic) {
             try {
+                // Check if the payload is actually different from the last one we processed
+                // to prevent infinite render loops if the broker/device spams the same data.
+                if (window._lastMqttPayload === messageForThisTopic) return;
+                window._lastMqttPayload = messageForThisTopic;
+
                 const payload = JSON.parse(messageForThisTopic);
                 console.log('--- MQTT DEBUG ---');
                 console.log('Topic:', settingsTopic);
