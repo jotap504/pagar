@@ -87,7 +87,7 @@ const DeviceDetails = () => {
                 console.error('Error parsing settings:', e);
             }
         }
-    }, [messages, uid]);
+    }, [messages, normalizedUid]);
 
     const handleChange = (name, value) => {
         setConfig(prev => ({ ...prev, [name]: value }));
