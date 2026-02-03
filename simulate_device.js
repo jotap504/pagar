@@ -26,9 +26,26 @@ client.on('connect', () => {
 
     client.publish(topic, payload, { retain: true }, (err) => {
         if (err) {
-            console.error('Publish error:', err);
+            console.error('Publish state error:', err);
         } else {
-            console.log(`Published to ${topic}: ${payload}`);
+            console.log(`Published state to ${topic}`);
+        }
+    });
+
+    // Also simulate auto-reporting settings
+    const settingsTopic = `qrsolo/${UID}/stat/settings`;
+    const settingsPayload = JSON.stringify({
+        devName: "Simulated Device",
+        mode: 0,
+        price: 100,
+        wifiSsid: "Simulator_WiFi"
+    });
+
+    client.publish(settingsTopic, settingsPayload, { retain: true }, (err) => {
+        if (err) {
+            console.error('Publish settings error:', err);
+        } else {
+            console.log(`Published settings to ${settingsTopic}`);
             console.log('Check your Web Dashboard now!');
         }
         client.end();

@@ -6,7 +6,7 @@ import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock,
 const DeviceDetails = () => {
     const { uid } = useParams();
     const navigate = useNavigate();
-    const { publish, subscribe, messages } = useMqtt();
+    const { publish, subscribe, messages, status } = useMqtt();
 
     // Form states
     const [config, setConfig] = useState({
@@ -53,10 +53,13 @@ const DeviceDetails = () => {
         if (messages[settingsTopic]) {
             try {
                 const payload = JSON.parse(messages[settingsTopic]);
-                console.log('Received Settings:', payload);
+                console.log('--- MQTT DEBUG ---');
+                console.log('Topic:', settingsTopic);
+                console.log('Received Settings Payload:', payload);
+
                 setConfig(prev => ({
                     ...prev,
-                    devName: payload.devName || prev.devName,
+                    devName: payload.devName !== undefined ? payload.devName : prev.devName,
                     price: payload.price || prev.price,
                     mode: payload.mode !== undefined ? payload.mode : prev.mode,
                     pulseDur: payload.pulseDur || prev.pulseDur,
