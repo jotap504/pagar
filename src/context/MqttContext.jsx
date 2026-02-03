@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import mqtt from 'mqtt';
 
 const MqttContext = createContext();
@@ -80,8 +80,17 @@ export const MqttProvider = ({ children }) => {
         };
     }, []);
 
+    const contextValue = useMemo(() => ({
+        client,
+        status,
+        connect,
+        publish,
+        subscribe,
+        messages
+    }), [client, status, connect, publish, subscribe, messages]);
+
     return (
-        <MqttContext.Provider value={{ client, status, connect, publish, subscribe, messages }}>
+        <MqttContext.Provider value={contextValue}>
             {children}
         </MqttContext.Provider>
     );

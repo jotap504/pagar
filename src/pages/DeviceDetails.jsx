@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMqtt } from '../context/MqttContext';
 import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff } from 'lucide-react';
@@ -8,6 +8,7 @@ const DeviceDetails = () => {
     const navigate = useNavigate();
     const normalizedUid = uid?.toUpperCase();
     const { publish, subscribe, messages, status } = useMqtt();
+    const hasRequestedSettings = useRef(false);
 
     // Form states
     const [config, setConfig] = useState({
@@ -40,21 +41,30 @@ const DeviceDetails = () => {
 
     // Sync with device
     useEffect(() => {
-        if (status === 'connected' && normalizedUid) {
+        if (status === 'connected' && normalizedUid && !hasRequestedSettings.current) {
             console.log(`[DeviceDetails] Subscribing to qrsolo/${normalizedUid}/stat/settings`);
             // 1. Subscribe to settings updates
             subscribe(`qrsolo/${normalizedUid}/stat/settings`);
             // 2. Request current settings
+            console.log('[DeviceDetails] Requesting settings for the first time in this session...');
             publish(`qrsolo/${normalizedUid}/cmnd/get_settings`, '{}');
+            hasRequestedSettings.current = true;
+        }
+
+        // Reset the ref if we disconnect, so we request again on reconnect
+        if (status === 'disconnected') {
+            hasRequestedSettings.current = false;
         }
     }, [status, normalizedUid, subscribe, publish]);
 
     // Handle incoming messages
+    const settingsTopic = `qrsolo/${normalizedUid}/stat/settings`;
+    const messageForThisTopic = messages[settingsTopic];
+
     useEffect(() => {
-        const settingsTopic = `qrsolo/${normalizedUid}/stat/settings`;
-        if (messages[settingsTopic]) {
+        if (messageForThisTopic) {
             try {
-                const payload = JSON.parse(messages[settingsTopic]);
+                const payload = JSON.parse(messageForThisTopic);
                 console.log('--- MQTT DEBUG ---');
                 console.log('Topic:', settingsTopic);
                 console.log('Received Settings Payload:', payload);
@@ -87,7 +97,7 @@ const DeviceDetails = () => {
                 console.error('Error parsing settings:', e);
             }
         }
-    }, [messages, normalizedUid]);
+    }, [messageForThisTopic, settingsTopic]);
 
     const handleChange = (name, value) => {
         setConfig(prev => ({ ...prev, [name]: value }));
