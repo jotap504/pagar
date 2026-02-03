@@ -117,6 +117,13 @@ const DeviceDetails = () => {
         return `...${token.slice(-5)}`;
     };
 
+    const [lastUpdated, setLastUpdated] = useState(null);
+    useEffect(() => {
+        if (messages[`qrsolo/${uid}/stat/settings`]) {
+            setLastUpdated(new Date());
+        }
+    }, [messages, uid]);
+
     return (
         <div className="min-h-screen bg-[#11161d] text-white pb-20 font-sans">
             {/* Sticky Header */}
@@ -127,15 +134,30 @@ const DeviceDetails = () => {
                     </button>
                     <div>
                         <h1 className="text-lg font-bold leading-tight">Configuración</h1>
-                        <p className="text-xs text-blue-400 font-mono tracking-wide">{uid}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-xs text-blue-400 font-mono tracking-wide">{uid}</p>
+                            {lastUpdated && <span className="text-[10px] text-green-500">• Actualizado {lastUpdated.toLocaleTimeString()}</span>}
+                        </div>
                     </div>
                 </div>
-                <button
-                    onClick={handleSaveAll}
-                    className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-full text-sm font-bold transition shadow-lg shadow-blue-500/20"
-                >
-                    Guardar
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => {
+                            publish(`qrsolo/${uid}/cmnd/get_settings`, '{}');
+                            alert('Solicitando configuración...');
+                        }}
+                        className="p-2 bg-[#1f2630] hover:bg-[#252d38] text-gray-400 hover:text-white rounded-full transition"
+                        title="Recargar desde dispositivo"
+                    >
+                        <RefreshCw size={20} />
+                    </button>
+                    <button
+                        onClick={handleSaveAll}
+                        className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-full text-sm font-bold transition shadow-lg shadow-blue-500/20"
+                    >
+                        Guardar
+                    </button>
+                </div>
             </div>
 
             {/* Main Grid Container - Full Width on Desktop */}
