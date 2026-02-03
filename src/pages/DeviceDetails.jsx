@@ -6,6 +6,7 @@ import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock,
 const DeviceDetails = () => {
     const { uid } = useParams();
     const navigate = useNavigate();
+    const normalizedUid = uid?.toUpperCase();
     const { publish, subscribe, messages, status } = useMqtt();
 
     // Form states
@@ -39,13 +40,14 @@ const DeviceDetails = () => {
 
     // Sync with device
     useEffect(() => {
-        if (status === 'connected') {
+        if (status === 'connected' && normalizedUid) {
+            console.log(`[DeviceDetails] Subscribing to qrsolo/${normalizedUid}/stat/settings`);
             // 1. Subscribe to settings updates
-            subscribe(`qrsolo/${uid}/stat/settings`);
+            subscribe(`qrsolo/${normalizedUid}/stat/settings`);
             // 2. Request current settings
-            publish(`qrsolo/${uid}/cmnd/get_settings`, '{}');
+            publish(`qrsolo/${normalizedUid}/cmnd/get_settings`, '{}');
         }
-    }, [status, uid, subscribe, publish]);
+    }, [status, normalizedUid, subscribe, publish]);
 
     // Handle incoming messages
     useEffect(() => {
@@ -108,7 +110,7 @@ const DeviceDetails = () => {
     };
 
     const sendCommand = (cmd, payload = {}) => {
-        publish(`qrsolo/${uid}/cmnd/${cmd}`, JSON.stringify(payload));
+        publish(`qrsolo/${normalizedUid}/cmnd/${cmd}`, JSON.stringify(payload));
         alert(`Comando ${cmd} enviado.`);
     };
 

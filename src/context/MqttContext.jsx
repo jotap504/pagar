@@ -50,7 +50,7 @@ export const MqttProvider = ({ children }) => {
 
         mqttClient.on('message', (topic, payload) => {
             const msg = payload.toString();
-            // console.log(`Msg: ${topic} => ${msg}`);
+            console.log(`[MQTT IN] ${topic}:`, msg.substring(0, 100) + (msg.length > 100 ? '...' : ''));
             setMessages(prev => ({
                 ...prev,
                 [topic]: msg
