@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #000000;
+  color: #ffffff;
+}
+
+.input-field {
+  @apply w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition shadow-inner;
+}
+
+.mode-btn {
+  @apply flex-1 p-6 rounded-2xl border flex flex-col items-center gap-3 transition font-bold text-lg;
+}
+
+.active-mode {
+  @apply bg-blue-600/10 border-blue-500 text-blue-400 shadow-[0_0_20px_#3b82f626];
+}
+
+.mode-btn:not(.active-mode) {
+  @apply bg-black border-gray-800 text-gray-500 hover:border-gray-600;
+}
