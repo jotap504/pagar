@@ -108,16 +108,28 @@ const DeviceDetails = () => {
     // Status / Logs / Files Handler
     useEffect(() => {
         if (statusMsg) {
-            console.log('--- MQTT STATUS ---', statusMsg);
+            console.log('[DeviceDetails] MQTT STATUS RECEIVED:', statusMsg);
 
-            // Check if it's a file list (starts with "Files:")
-            if (statusMsg.startsWith('Files:')) {
-                const fileList = statusMsg.replace('Files:', '').trim().split(',').filter(f => f);
-                setFiles(fileList);
+            // Check if it's a file list (starts with "FILES:")
+            if (statusMsg.startsWith('FILES:')) {
+                try {
+                    const jsonStr = statusMsg.replace('FILES:', '').trim();
+                    const fileArray = JSON.parse(jsonStr);
+                    // Extract just the names for the UI, or keep full objects if needed
+                    const fileList = fileArray.map(f => typeof f === 'string' ? f : f.name);
+                    setFiles(fileList);
+                } catch (e) {
+                    console.error('Error parsing files JSON:', e);
+                }
             }
-            // Check if it's CSV logs (multiple lines or contains commas)
-            else if (statusMsg.includes(',')) {
-                const lines = statusMsg.split('\n');
+            // Check if it's CSV logs (starts with "LOGS:")
+            else if (statusMsg.startsWith('LOGS:')) {
+                const csvData = statusMsg.replace('LOGS:', '').trim();
+                if (!csvData) {
+                    setLogs([]);
+                    return;
+                }
+                const lines = csvData.split('\n');
                 const parsedLogs = lines.map(line => {
                     const parts = line.split(',');
                     if (parts.length >= 3) {
@@ -148,12 +160,36 @@ const DeviceDetails = () => {
 
     const handleSaveAll = () => {
         const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
-        const payload = { ...config };
+
+        // Map internal state names to what the ESP32 expects
+        const payload = {
+            devName: config.devName,
+            price: parseFloat(config.price),
+            mode: parseInt(config.mode),
+            pulseDur: parseInt(config.pulseDur),
+            fixedUnits: parseInt(config.fixedUnits),
+            fixedType: parseInt(config.fixedModeType),
+            staticQrText: config.staticQrText,
+            promoEn: config.promoEnabled,
+            promoThr: parseInt(config.promoThreshold),
+            promoVal: parseFloat(config.promoDiscount),
+            sound: config.audioEnabled,
+            vol: parseInt(config.volume),
+            wifiSsid: config.wifiSsid,
+            wifiPass: config.wifiPass,
+            mpToken: config.mpToken,
+            googleUrl: config.googleScriptUrl,
+            fwUrl: config.manifestUrl
+        };
+
+        // Security: If mpToken is masked, do NOT send it back
         if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
             delete payload.mpToken;
         }
+
+        console.log('[DeviceDetails] Sending Save Payload:', payload);
         publish(topic, JSON.stringify(payload));
-        alert('Configuración guardada y enviada.');
+        alert('Configuración guardada y enviada al dispositivo.');
     };
 
     const sendCommand = (cmd, payload = {}) => {
@@ -187,11 +223,14 @@ const DeviceDetails = () => {
                 <div className="flex gap-2">
                     <button
                         onClick={() => {
+                            console.log('[DeviceDetails] Manual refresh requested');
                             publish(`qrsolo/${uid}/cmnd/get_settings`, '{}');
-                            alert('Solicitando configuración...');
+                            publish(`qrsolo/${uid}/cmnd/get_logs`, '{}');
+                            publish(`qrsolo/${uid}/cmnd/list_ads`, '{}');
+                            alert('Solicitando datos actualizados...');
                         }}
                         className="p-2 bg-[#1f2630] hover:bg-[#252d38] text-gray-400 hover:text-white rounded-full transition"
-                        title="Recargar desde dispositivo"
+                        title="Recargar todo desde dispositivo"
                     >
                         <RefreshCw size={20} />
                     </button>
