@@ -51,7 +51,7 @@ const DeviceDetails = () => {
 
     // Handle incoming messages
     useEffect(() => {
-        const settingsTopic = `qrsolo/${uid}/stat/settings`;
+        const settingsTopic = `qrsolo/${normalizedUid}/stat/settings`;
         if (messages[settingsTopic]) {
             try {
                 const payload = JSON.parse(messages[settingsTopic]);
@@ -94,7 +94,7 @@ const DeviceDetails = () => {
     };
 
     const handleSaveAll = () => {
-        const topic = `qrsolo/${uid}/cmnd/settings`;
+        const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
 
         // Create copy of config to modify payload
         const payload = { ...config };
