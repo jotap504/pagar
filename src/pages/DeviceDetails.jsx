@@ -37,16 +37,52 @@ const DeviceDetails = () => {
         { amount: 0, duration: 0, ref: 'PowerCycle', time: '09:15 AM' }
     ]);
 
-    // Mock loading
+    // Sync with device
     useEffect(() => {
-        setConfig(prev => ({
-            ...prev,
-            devName: 'Padel Court 3',
-            wifiSsid: 'Invitados_Club',
-            mpToken: 'APP_USR-6384729103847-22345', // Example token
-            googleScriptUrl: 'https://script.google.com/macros/s/...'
-        }));
-    }, []);
+        if (status === 'connected') {
+            // 1. Subscribe to settings updates
+            subscribe(`qrsolo/${uid}/stat/settings`);
+            // 2. Request current settings
+            publish(`qrsolo/${uid}/cmnd/get_settings`, '{}');
+        }
+    }, [status, uid, subscribe, publish]);
+
+    // Handle incoming messages
+    useEffect(() => {
+        const settingsTopic = `qrsolo/${uid}/stat/settings`;
+        if (messages[settingsTopic]) {
+            try {
+                const payload = JSON.parse(messages[settingsTopic]);
+                console.log('Received Settings:', payload);
+                setConfig(prev => ({
+                    ...prev,
+                    devName: payload.devName || prev.devName,
+                    price: payload.price || prev.price,
+                    mode: payload.mode !== undefined ? payload.mode : prev.mode,
+                    pulseDur: payload.pulseDur || prev.pulseDur,
+
+                    fixedUnits: payload.fixedUnits || prev.fixedUnits,
+                    fixedModeType: payload.fixedType !== undefined ? payload.fixedType : prev.fixedModeType,
+                    staticQrText: payload.staticQrText || prev.staticQrText,
+
+                    promoEnabled: payload.promoEn !== undefined ? payload.promoEn : prev.promoEnabled,
+                    promoThreshold: payload.promoThr || prev.promoThreshold,
+                    promoDiscount: payload.promoVal || prev.promoDiscount,
+
+                    audioEnabled: payload.sound !== undefined ? payload.sound : prev.audioEnabled,
+                    volume: payload.vol || prev.volume,
+
+                    wifiSsid: payload.wifiSsid || prev.wifiSsid,
+                    // wifiPass: payload.wifiPass, // Often not sent back for security
+                    mpToken: payload.mpToken || prev.mpToken,
+                    googleScriptUrl: payload.googleUrl || prev.googleScriptUrl,
+                    manifestUrl: payload.fwUrl || prev.manifestUrl
+                }));
+            } catch (e) {
+                console.error('Error parsing settings:', e);
+            }
+        }
+    }, [messages, uid]);
 
     const handleChange = (name, value) => {
         setConfig(prev => ({ ...prev, [name]: value }));
@@ -54,7 +90,17 @@ const DeviceDetails = () => {
 
     const handleSaveAll = () => {
         const topic = `qrsolo/${uid}/cmnd/settings`;
-        publish(topic, JSON.stringify(config));
+
+        // Create copy of config to modify payload
+        const payload = { ...config };
+
+        // Security: If mpToken is masked (starts with ... or *****), do NOT send it back
+        // This prevents overwriting the real token with the mask.
+        if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
+            delete payload.mpToken;
+        }
+
+        publish(topic, JSON.stringify(payload));
         alert('Configuración guardada y enviada.');
     };
 
