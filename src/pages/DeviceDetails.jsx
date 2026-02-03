@@ -10,6 +10,11 @@ const DeviceDetails = () => {
     const { publish, subscribe, messages, status } = useMqtt();
     const hasRequestedSettings = useRef(false);
 
+    useEffect(() => {
+        console.log('[DeviceDetails] Mounted');
+        return () => console.log('[DeviceDetails] Unmounted');
+    }, []);
+
     // Form states
     const [config, setConfig] = useState({
         devName: '',

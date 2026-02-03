@@ -10,6 +10,7 @@ export const MqttProvider = ({ children }) => {
     const [status, setStatus] = useState('disconnected');
     const [messages, setMessages] = useState({});
     const clientRef = useRef(null);
+    const connectionInProgressRef = useRef(false);
 
     // Configuration
     // Try WSS (Secure WebSocket) which is less likely to be blocked than WS
@@ -19,31 +20,42 @@ export const MqttProvider = ({ children }) => {
     const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 
     const connect = useCallback((brokerUrl = BROKER_URL) => {
-        if (clientRef.current?.connected) return;
+        if (clientRef.current?.connected || connectionInProgressRef.current) {
+            console.log('MQTT: Connection already active or in progress. Skipping.');
+            return;
+        }
 
+        connectionInProgressRef.current = true;
         setStatus('connecting');
         console.log(`Connecting to MQTT broker at ${brokerUrl}...`);
+
+        if (clientRef.current) {
+            clientRef.current.end(true);
+        }
 
         const mqttClient = mqtt.connect(brokerUrl, {
             clientId: `pagar_web_${Math.random().toString(16).substring(2, 8)}`,
             keepalive: 60,
+            reconnectPeriod: 5000,
         });
 
         mqttClient.on('connect', () => {
             console.log('MQTT Connected');
             setStatus('connected');
+            connectionInProgressRef.current = false;
             clientRef.current = mqttClient;
             setClient(mqttClient);
         });
 
         mqttClient.on('error', (err) => {
             console.error('MQTT Connection Error:', err);
-            // setStatus('error');
+            connectionInProgressRef.current = false;
         });
 
         mqttClient.on('close', () => {
             console.log('MQTT Disconnected');
             setStatus('disconnected');
+            connectionInProgressRef.current = false;
             clientRef.current = null;
             setClient(null);
         });
