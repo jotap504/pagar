@@ -90,7 +90,7 @@ const DeviceDetails = () => {
                     volume: payload.vol !== undefined ? payload.vol : prev.volume,
                     wifiSsid: payload.wifiSsid !== undefined ? payload.wifiSsid : prev.wifiSsid,
                     mpToken: payload.mpToken !== undefined ? payload.mpToken : prev.mpToken,
-                    googleUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleScriptUrl,
+                    googleUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleUrl,
                     manifestUrl: payload.fwUrl !== undefined ? payload.fwUrl : prev.manifestUrl
                 }));
             } catch (e) {
@@ -167,7 +167,7 @@ const DeviceDetails = () => {
             wifiSsid: config.wifiSsid,
             wifiPass: config.wifiPass,
             mpToken: config.mpToken,
-            googleUrl: config.googleScriptUrl,
+            googleUrl: config.googleUrl,
             fwUrl: config.manifestUrl
         };
 
