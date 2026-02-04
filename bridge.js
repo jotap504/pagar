@@ -91,15 +91,33 @@ client.on('message', async (topic, message) => {
 
             // Find who owns this device
             const deviceDoc = await db.collection('devices').doc(uid).get();
-            if (!deviceDoc.exists) {
-                log(`[Bridge] Device ${uid} is not linked to any user. Skipping.`);
-                return;
-            }
+            let ownerId = deviceDoc.exists ? deviceDoc.data().ownerId : null;
 
-            const ownerId = deviceDoc.data().ownerId;
             if (!ownerId) {
-                log(`[Bridge] Device ${uid} has no ownerId. Skipping.`);
-                return;
+                log(`[Bridge] Device ${uid} has no direct owner link. Attempting self-healing...`);
+
+                // Query users who have this device in their 'devices' array
+                const usersWithDevice = await db.collection('users')
+                    .where('devices', 'array-contains', uid)
+                    .limit(1)
+                    .get();
+
+                if (!usersWithDevice.empty) {
+                    const ownerDoc = usersWithDevice.docs[0];
+                    ownerId = ownerDoc.id;
+                    log(`[Bridge] Found owner for ${uid}: ${ownerId}. Repairing link in Firestore...`);
+
+                    // Repair the reverse mapping
+                    await db.collection('devices').doc(uid).set({
+                        ownerId: ownerId,
+                        linkedAt: new Date().toISOString(),
+                        status: 'online',
+                        lastActive: admin.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } else {
+                    log(`[Bridge] Device ${uid} is not linked to any user in the system. Skipping.`);
+                    return;
+                }
             }
 
             const logData = statusMsg.replace('LOG_NEW:', '').split(',');
