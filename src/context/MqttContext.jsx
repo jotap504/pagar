@@ -12,12 +12,11 @@ export const MqttProvider = ({ children }) => {
     const clientRef = useRef(null);
     const connectionInProgressRef = useRef(false);
 
-    // Configuration
-    // Try WSS (Secure WebSocket) which is less likely to be blocked than WS
-    // Broker: broker.emqx.io
-    // Port: 8084 (WSS)
+    // Configuration HiveMQ Cloud
+    // URL: ea2b35fec63e49deb5d3683f11b750b0.s1.eu.hivemq.cloud
+    // Port: 8884 (WSS)
     // Path: /mqtt
-    const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+    const BROKER_URL = 'wss://ea2b35fec63e49deb5d3683f11b750b0.s1.eu.hivemq.cloud:8884/mqtt';
 
     const connect = useCallback((brokerUrl = BROKER_URL) => {
         if (clientRef.current?.connected || connectionInProgressRef.current) {
@@ -34,6 +33,8 @@ export const MqttProvider = ({ children }) => {
         }
 
         const mqttClient = mqtt.connect(brokerUrl, {
+            username: 'pagarqr',
+            password: 'Corsa960',
             clientId: `pagar_web_${Math.random().toString(16).substring(2, 8)}`,
             keepalive: 60,
             reconnectPeriod: 5000,

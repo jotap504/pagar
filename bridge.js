@@ -45,11 +45,13 @@ try {
 
 const db = admin.app().firestore("pagar-webonline");
 
-// 2. MQTT Config
-const MQTT_BROKER = "mqtt://broker.emqx.io";
-log(`📡 Connecting to MQTT Broker: ${MQTT_BROKER}`);
+// 2. MQTT Config (HiveMQ Cloud)
+const MQTT_BROKER = "mqtts://ea2b35fec63e49deb5d3683f11b750b0.s1.eu.hivemq.cloud";
+log(`📡 Connecting to Secure MQTT Broker: ${MQTT_BROKER}`);
 
 const client = mqtt.connect(MQTT_BROKER, {
+    username: 'pagarqr',
+    password: 'Corsa960',
     reconnectPeriod: 5000, // Reconnect every 5 seconds if disconnected
     connectTimeout: 30 * 1000, // 30s timeout
 });
