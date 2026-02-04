@@ -6,49 +6,102 @@ import mqtt from 'mqtt';
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 
-// 1. Initialize Firebase Admin
-// You need to download your serviceAccountKey.json from Firebase Console
-// Settings -> Service Accounts -> Generate new private key
-const serviceAccount = JSON.parse(readFileSync('./serviceAccountKey.json', 'utf8'));
+// --- LOGGING HELPER ---
+const log = (msg) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] ${msg}`);
+};
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+const logError = (msg, err) => {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] ❌ ERROR: ${msg}`, err || '');
+};
+
+// --- GLOBAL ERROR HANDLING ---
+process.on('uncaughtException', (err) => {
+    logError('Uncaught Exception occurred!', err);
+    // Ideally, we'd exit and let a process manager (like PM2 or systemd) restart us
+    // process.exit(1); 
 });
+
+process.on('unhandledRejection', (reason, promise) => {
+    logError('Unhandled Rejection at:', promise);
+    logError('Reason:', reason);
+});
+
+log('🚀 Starting Cloud Bridge...');
+
+// 1. Initialize Firebase Admin
+try {
+    const serviceAccount = JSON.parse(readFileSync('./serviceAccountKey.json', 'utf8'));
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    log('✅ Firebase Admin initialized');
+} catch (err) {
+    logError('Failed to initialize Firebase Admin', err);
+    process.exit(1);
+}
 
 const db = admin.firestore();
 
 // 2. MQTT Config
-const MQTT_BROKER = "mqtt://broker.emqx.io"; // Use your broker
-const client = mqtt.connect(MQTT_BROKER);
+const MQTT_BROKER = "mqtt://broker.emqx.io";
+log(`📡 Connecting to MQTT Broker: ${MQTT_BROKER}`);
+
+const client = mqtt.connect(MQTT_BROKER, {
+    reconnectPeriod: 5000, // Reconnect every 5 seconds if disconnected
+    connectTimeout: 30 * 1000, // 30s timeout
+});
 
 client.on('connect', () => {
-    console.log('✅ Bridge connected to MQTT Broker');
-    // Subscribe to all device logs
-    client.subscribe('qrsolo/+/stat/status');
+    log('✅ Bridge connected to MQTT Broker');
+    client.subscribe('qrsolo/+/stat/status', (err) => {
+        if (err) {
+            logError('Failed to subscribe to topic', err);
+        } else {
+            log('📝 Subscribed to qrsolo/+/stat/status');
+        }
+    });
+});
+
+client.on('reconnect', () => {
+    log('🔄 Attempting to reconnect to MQTT Broker...');
+});
+
+client.on('offline', () => {
+    log('⚠️ MQTT Client is offline');
+});
+
+client.on('error', (err) => {
+    logError('MQTT Bridge Error', err);
 });
 
 client.on('message', async (topic, message) => {
-    const statusMsg = message.toString();
+    try {
+        const statusMsg = message.toString();
 
-    // Check if it's a new log entry
-    if (statusMsg.startsWith('LOG_NEW:')) {
-        const parts = topic.split('/');
-        const uid = parts[1]; // Get UID from topic
+        if (statusMsg.startsWith('LOG_NEW:')) {
+            const parts = topic.split('/');
+            const uid = parts[1];
 
-        console.log(`[Bridge] New log from ${uid}: ${statusMsg}`);
+            log(`[Bridge] New log from ${uid}: ${statusMsg}`);
 
-        try {
             // Find who owns this device
             const deviceDoc = await db.collection('devices').doc(uid).get();
             if (!deviceDoc.exists) {
-                console.log(`[Bridge] Device ${uid} is not linked to any user. Skipping.`);
+                log(`[Bridge] Device ${uid} is not linked to any user. Skipping.`);
                 return;
             }
 
             const ownerId = deviceDoc.data().ownerId;
+            if (!ownerId) {
+                log(`[Bridge] Device ${uid} has no ownerId. Skipping.`);
+                return;
+            }
+
             const logData = statusMsg.replace('LOG_NEW:', '').split(',');
 
-            // Parse CSV: amount, duration, ref
             const entry = {
                 deviceUid: uid,
                 amount: parseFloat(logData[0]) || 0,
@@ -58,17 +111,10 @@ client.on('message', async (topic, message) => {
                 raw: statusMsg
             };
 
-            // Save to user's global logs collection for easy statistics
             await db.collection('users').doc(ownerId).collection('history').add(entry);
-
-            console.log(`[Bridge] Log successfully synced for User: ${ownerId}`);
-
-        } catch (e) {
-            console.error('[Bridge] Error syncing log:', e);
+            log(`[Bridge] Log successfully synced for User: ${ownerId}`);
         }
+    } catch (e) {
+        logError('[Bridge] Critical error processing message', e);
     }
-});
-
-client.on('error', (err) => {
-    console.error('❌ MQTT Bridge Error:', err);
 });
