@@ -3,8 +3,9 @@ import { useMqtt } from '../context/MqttContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X } from 'lucide-react';
+import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X, Trash2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { collection, query, where, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore';
 import ClaimDevice from '../components/ClaimDevice';
 
 const Dashboard = () => {
@@ -12,7 +13,9 @@ const Dashboard = () => {
     const { user } = useAuth();
     const [claimedUids, setClaimedUids] = useState([]);
     const [deviceStates, setDeviceStates] = useState({});
+    const [firestoreStatuses, setFirestoreStatuses] = useState({});
     const [showClaimModal, setShowClaimModal] = useState(false);
+    const [unlinkingId, setUnlinkingId] = useState(null);
 
     useEffect(() => {
         if (status === 'disconnected') {
@@ -41,7 +44,30 @@ const Dashboard = () => {
         return unsubscribe;
     }, [user]);
 
-    // 2. Subscribe to claimed devices only
+    // 2. Listen for device statuses in 'devices' collection
+    useEffect(() => {
+        if (!user || claimedUids.length === 0) {
+            setFirestoreStatuses({});
+            return;
+        }
+
+        console.log('[Dashboard] Listening for device statuses for:', claimedUids);
+
+        // We listen to the entire devices collection where ownerId is the user
+        // This is more efficient than individual listeners
+        const q = query(collection(db, 'devices'), where('ownerId', '==', user.uid));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const statuses = {};
+            snapshot.forEach((doc) => {
+                statuses[doc.id] = doc.data();
+            });
+            setFirestoreStatuses(statuses);
+        });
+
+        return unsubscribe;
+    }, [user, claimedUids]);
+
+    // 3. Subscribe to claimed devices only (MQTT)
     useEffect(() => {
         if (status === 'connected' && claimedUids.length > 0) {
             claimedUids.forEach(uid => {
@@ -74,11 +100,46 @@ const Dashboard = () => {
         });
     }, [messages, claimedUids]);
 
-    const devicesList = claimedUids.map(uid => ({
-        uid,
-        data: deviceStates[uid] || {},
-        isOnline: deviceStates[uid] ? (Date.now() / 1000) - deviceStates[uid].timestamp < 60 : false
-    }));
+    const handleUnlink = async (uid) => {
+        if (!window.confirm(`¿Estás seguro de que quieres desvincular el dispositivo ${uid}? Dejará de aparecer en tu panel.`)) return;
+
+        try {
+            // 1. Remove from user's device list
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+                devices: arrayRemove(uid)
+            });
+
+            // 2. Clean up device document (remove owner)
+            // We set it to null so it can be claimed again
+            const deviceRef = doc(db, 'devices', uid);
+            await updateDoc(deviceRef, {
+                ownerId: null,
+                status: 'offline', // Reset status
+                unlinkedAt: new Date()
+            });
+
+            console.log('[Dashboard] Device unlinked successfully:', uid);
+        } catch (err) {
+            console.error('[Dashboard] Error unlinking device:', err);
+            alert('Error al desvincular el dispositivo');
+        }
+    };
+
+    const devicesList = claimedUids.map(uid => {
+        const fsData = firestoreStatuses[uid] || {};
+        const mqttData = deviceStates[uid] || {};
+
+        // Online if Firestore says so OR if we have recent MQTT activity
+        const isOnline = fsData.status === 'online' ||
+            (mqttData.timestamp && (Date.now() / 1000) - mqttData.timestamp < 60);
+
+        return {
+            uid,
+            data: { ...fsData, ...mqttData },
+            isOnline
+        };
+    });
 
     return (
         <div className="min-h-screen bg-[#11161d] text-white font-sans pb-24">
@@ -136,7 +197,13 @@ const Dashboard = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {devicesList.map(({ uid, data, isOnline }) => (
-                            <DeviceListItem key={uid} uid={uid} data={data} isOnline={isOnline} />
+                            <DeviceListItem
+                                key={uid}
+                                uid={uid}
+                                data={data}
+                                isOnline={isOnline}
+                                onUnlink={() => handleUnlink(uid)}
+                            />
                         ))}
 
                         {claimedUids.length === 0 && (
@@ -174,11 +241,11 @@ const Dashboard = () => {
     );
 };
 
-const DeviceListItem = ({ uid, data, isOnline }) => (
+const DeviceListItem = ({ uid, data, isOnline, onUnlink }) => (
     <div className="bg-[#1f2630] rounded-2xl p-4 border border-gray-800 flex items-center gap-4 hover:border-gray-700 transition shadow-sm group">
         <div className="w-12 h-12 rounded-xl bg-[#161b22] flex items-center justify-center relative">
             <Zap className={isOnline ? "text-blue-500" : "text-gray-700"} size={20} />
-            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#1f2630] ${isOnline ? 'bg-green-500' : 'bg-gray-800 shadow-[0_0_8px_rgba(239,68,68,0.3)]'}`}></div>
+            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#1f2630] ${isOnline ? 'bg-green-500' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]'}`}></div>
         </div>
 
         <div className="flex-1 min-w-0">
@@ -188,9 +255,18 @@ const DeviceListItem = ({ uid, data, isOnline }) => (
             </div>
         </div>
 
-        <Link to={`/admin/device/${uid}`} className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white text-xs font-bold rounded-lg transition active:scale-95 border border-blue-500/20 hover:border-blue-500 shadow-sm">
-            Panel
-        </Link>
+        <div className="flex items-center gap-2">
+            <button
+                onClick={(e) => { e.preventDefault(); onUnlink(); }}
+                className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"
+                title="Desvincular"
+            >
+                <Trash2 size={16} />
+            </button>
+            <Link to={`/admin/device/${uid}`} className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white text-xs font-bold rounded-lg transition active:scale-95 border border-blue-500/20 hover:border-blue-500 shadow-sm">
+                Panel
+            </Link>
+        </div>
     </div>
 );
 

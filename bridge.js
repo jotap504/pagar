@@ -113,6 +113,22 @@ client.on('message', async (topic, message) => {
 
             await db.collection('users').doc(ownerId).collection('history').add(entry);
             log(`[Bridge] Log successfully synced for User: ${ownerId}`);
+
+            // Also update device status as online since we just got a log
+            await db.collection('devices').doc(uid).update({
+                status: 'online',
+                lastActive: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        else if (statusMsg === 'online' || statusMsg === 'offline') {
+            const parts = topic.split('/');
+            const uid = parts[1];
+            log(`[Bridge] Device ${uid} is now ${statusMsg.toUpperCase()}`);
+
+            await db.collection('devices').doc(uid).set({
+                status: statusMsg,
+                lastActive: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
         }
     } catch (e) {
         logError('[Bridge] Critical error processing message', e);
