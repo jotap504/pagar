@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useMqtt } from '../context/MqttContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, doc, onSnapshot, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X, Trash2, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { collection, query, where, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore';
 import ClaimDevice from '../components/ClaimDevice';
 
 const Dashboard = () => {
