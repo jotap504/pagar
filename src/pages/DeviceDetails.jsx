@@ -41,6 +41,8 @@ const DeviceDetails = () => {
     const [showMpToken, setShowMpToken] = useState(false);
     const [logs, setLogs] = useState([]);
     const [files, setFiles] = useState([]);
+    const [availableWifi, setAvailableWifi] = useState([]);
+    const [isScanning, setIsScanning] = useState(false);
 
     // Sync with device
     useEffect(() => {
@@ -134,6 +136,32 @@ const DeviceDetails = () => {
                     return null;
                 }).filter(l => l);
                 setLogs(parsedLogs.reverse());
+            }
+            else if (statusMsg.startsWith('LOG_NEW:')) {
+                try {
+                    const data = statusMsg.replace('LOG_NEW:', '').trim();
+                    const [amount, duration, ref] = data.split(',');
+                    const newLog = {
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                        amount: parseFloat(amount),
+                        duration: parseInt(duration),
+                        ref: ref || 'Evento'
+                    };
+                    setLogs(prev => [newLog, ...prev]);
+                } catch (e) {
+                    console.error('Error parsing new log:', e);
+                }
+            }
+            else if (statusMsg.startsWith('WIFI_LIST:')) {
+                try {
+                    const jsonStr = statusMsg.replace('WIFI_LIST:', '').trim();
+                    const wifiList = JSON.parse(jsonStr);
+                    setAvailableWifi(wifiList.sort((a, b) => b.rssi - a.rssi));
+                    setIsScanning(false);
+                } catch (e) {
+                    console.error('Error parsing wifi list:', e);
+                    setIsScanning(false);
+                }
             }
         }
     }, [statusMsg]);
@@ -240,12 +268,6 @@ const DeviceDetails = () => {
                     >
                         <RefreshCw size={20} />
                     </button>
-                    <button
-                        onClick={handleSaveAll}
-                        className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-full text-sm font-bold transition shadow-lg shadow-blue-500/20"
-                    >
-                        Guardar Todo
-                    </button>
                 </div>
             </div>
 
@@ -335,13 +357,52 @@ const DeviceDetails = () => {
                     {/* COLUMN 2: Network & Services */}
                     <div className="space-y-6">
                         <Section title="RED WIFI" onSave={() => handleSaveSection('WiFi', ['wifiSsid', 'wifiPass', 'devName'])}>
-                            <div className="grid grid-cols-2 gap-4">
-                                <InputGroup label="WiFi SSID">
-                                    <Input value={config.wifiSsid} onChange={(e) => handleChange('wifiSsid', e.target.value)} />
-                                </InputGroup>
-                                <InputGroup label="WiFi Password">
-                                    <Input type="password" value={config.wifiPass} onChange={(e) => handleChange('wifiPass', e.target.value)} />
-                                </InputGroup>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <InputGroup label="WiFi SSID">
+                                        <div className="relative">
+                                            <Input value={config.wifiSsid} onChange={(e) => handleChange('wifiSsid', e.target.value)} />
+                                            <button
+                                                onClick={() => {
+                                                    setIsScanning(true);
+                                                    setAvailableWifi([]);
+                                                    sendCommand('scan_wifi');
+                                                }}
+                                                disabled={isScanning}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded transition disabled:opacity-50"
+                                            >
+                                                {isScanning ? <RefreshCw size={14} className="animate-spin" /> : <Wifi size={14} />}
+                                            </button>
+                                        </div>
+                                    </InputGroup>
+                                    <InputGroup label="WiFi Password">
+                                        <Input type="password" value={config.wifiPass} onChange={(e) => handleChange('wifiPass', e.target.value)} />
+                                    </InputGroup>
+                                </div>
+
+                                {availableWifi.length > 0 && (
+                                    <div className="bg-black/20 rounded-xl border border-gray-800/50 overflow-hidden divide-y divide-gray-800">
+                                        <div className="px-3 py-2 bg-[#1f2630] flex justify-between items-center text-[10px] font-black uppercase text-gray-500 tracking-widest">
+                                            <span>Redes Detectadas</span>
+                                            <button onClick={() => setAvailableWifi([])} className="hover:text-white">Cerrar</button>
+                                        </div>
+                                        <div className="max-h-[150px] overflow-y-auto custom-scrollbar">
+                                            {availableWifi.map((net, i) => (
+                                                <div
+                                                    key={i}
+                                                    onClick={() => handleChange('wifiSsid', net.ssid)}
+                                                    className="flex items-center justify-between px-3 py-2.5 hover:bg-white/5 cursor-pointer transition group"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <Wifi size={12} className={net.rssi > -60 ? "text-green-500" : net.rssi > -80 ? "text-yellow-500" : "text-red-500"} />
+                                                        <span className="text-xs text-gray-300 group-hover:text-white">{net.ssid}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-mono text-gray-600">{net.rssi} dBm</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </Section>
 
@@ -427,20 +488,35 @@ const DeviceDetails = () => {
                             </div>
                         </Section>
 
-                        <Section title="PUBLICIDAD (PANTALLA)">
-                            <div className="grid grid-cols-2 gap-4">
+                        <Section title="PUBLICIDAD (SD CARD)">
+                            <div className="space-y-3">
                                 {files.length > 0 ? files.map((file, i) => (
-                                    <div key={i} className="aspect-video bg-[#1a202a] rounded-xl border border-gray-700 flex flex-col items-center justify-center relative overflow-hidden group">
-                                        <div onClick={() => sendCommand('delete_ad', file)} className="absolute top-2 right-2 bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white w-6 h-6 rounded flex items-center justify-center text-xs shadow-md z-10 cursor-pointer transition">x</div>
-                                        <ImageIcon size={20} className="text-blue-500/30 mb-2" />
-                                        <p className="text-[10px] text-gray-500 px-2 truncate w-full text-center font-mono">{file}</p>
+                                    <div key={i} className="flex items-center justify-between p-3 bg-[#1a202a] rounded-xl border border-gray-800 group hover:border-blue-500/30 transition-all">
+                                        <div className="flex items-center gap-3 truncate">
+                                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                                <FileText size={16} />
+                                            </div>
+                                            <span className="text-xs font-mono text-gray-300 truncate">{file}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => sendCommand('delete_ad', file)}
+                                            className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition"
+                                            title="Eliminar archivo"
+                                        >
+                                            <Plus size={16} className="rotate-45" />
+                                        </button>
                                     </div>
                                 )) : (
-                                    <div className="col-span-2 p-8 text-center text-gray-600 italic text-xs border border-dashed border-gray-800 rounded-xl bg-black/5">No hay archivos en la SD</div>
+                                    <div className="p-8 text-center text-gray-600 italic text-xs border border-dashed border-gray-800 rounded-xl bg-black/5">
+                                        No hay archivos en la SD
+                                    </div>
                                 )}
-                                <div className="aspect-video bg-[#1a202a] rounded-xl border border-dashed border-gray-700 flex flex-col items-center justify-center hover:bg-white/5 cursor-pointer transition" onClick={() => alert('Solo carga via SD manual por ahora')}>
-                                    <Plus className="text-gray-600 mb-1" size={16} />
-                                    <p className="text-[10px] text-gray-600 font-bold">Añadir JPG</p>
+                                <div
+                                    className="p-3 bg-blue-500/5 border border-dashed border-blue-500/20 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-500/10 cursor-pointer transition group"
+                                    onClick={() => alert('Solo carga via SD manual por ahora')}
+                                >
+                                    <Plus className="text-blue-500/50 group-hover:text-blue-500" size={16} />
+                                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest">Añadir Archivo JPG</p>
                                 </div>
                             </div>
                         </Section>
