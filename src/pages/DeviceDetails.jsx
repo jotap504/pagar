@@ -67,31 +67,35 @@ const DeviceDetails = () => {
     useEffect(() => {
         if (!user || !normalizedUid) return;
 
-        console.log(`[DeviceDetails] Fetching history from Firestore for: ${normalizedUid}`);
+        console.log(`[DeviceDetails] Fetching history from Firestore for User...`);
+        // Remove deviceUid filter to avoid composite index requirement
         const q = query(
             collection(db, 'users', user.uid, 'history'),
-            where('deviceUid', '==', normalizedUid),
             orderBy('timestamp', 'desc'),
-            limit(100)
+            limit(200) // Fetch a bit more to ensure we have enough for this device
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const firestoreLogs = snapshot.docs.map(doc => {
-                const data = doc.data();
-                // Convert Firestore Timestamp to formatted time
-                const date = data.timestamp ? data.timestamp.toDate() : new Date();
-                return {
-                    time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                    amount: data.amount,
-                    duration: data.duration,
-                    ref: data.ref,
-                    isCloud: true
-                };
-            });
+            const allLogs = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                date: doc.data().timestamp ? doc.data().timestamp.toDate() : new Date()
+            }));
 
-            // Merge with local logs if any? 
-            // For now, let Firestore be the source of truth for history
-            setLogs(firestoreLogs);
+            // Filter by device in memory
+            const filteredLogs = allLogs
+                .filter(log => log.deviceUid === normalizedUid)
+                .map(log => ({
+                    time: log.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    amount: log.amount,
+                    duration: log.duration,
+                    ref: log.ref,
+                    isCloud: true
+                }));
+
+            setLogs(filteredLogs);
+        }, (err) => {
+            console.error('[DeviceDetails] History listener error:', err);
         });
 
         return unsubscribe;
