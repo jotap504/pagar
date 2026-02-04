@@ -33,7 +33,7 @@ const DeviceDetails = () => {
         wifiSsid: '',
         wifiPass: '',
         mpToken: '',
-        googleScriptUrl: '',
+        googleUrl: '',
         manifestUrl: '',
         files: []
     });
@@ -46,11 +46,9 @@ const DeviceDetails = () => {
     useEffect(() => {
         if (status === 'connected' && normalizedUid && !hasRequestedSettings.current) {
             console.log(`[DeviceDetails] Subscribing to qrsolo/${normalizedUid}/stat/#`);
-            // 1. Subscribe to all status topics
             subscribe(`qrsolo/${normalizedUid}/stat/settings`);
             subscribe(`qrsolo/${normalizedUid}/stat/status`);
 
-            // 2. Request current data
             console.log('[DeviceDetails] Requesting full device state...');
             publish(`qrsolo/${normalizedUid}/cmnd/get_settings`, '{}');
             publish(`qrsolo/${normalizedUid}/cmnd/get_logs`, '{}');
@@ -82,21 +80,17 @@ const DeviceDetails = () => {
                     price: payload.price !== undefined ? payload.price : prev.price,
                     mode: payload.mode !== undefined ? payload.mode : prev.mode,
                     pulseDur: payload.pulseDur !== undefined ? payload.pulseDur : prev.pulseDur,
-
                     fixedUnits: payload.fixedUnits !== undefined ? payload.fixedUnits : prev.fixedUnits,
                     fixedModeType: payload.fixedType !== undefined ? payload.fixedType : prev.fixedModeType,
                     staticQrText: payload.staticQrText !== undefined ? payload.staticQrText : prev.staticQrText,
-
                     promoEnabled: payload.promoEn !== undefined ? payload.promoEn : prev.promoEnabled,
                     promoThreshold: payload.promoThr !== undefined ? payload.promoThr : prev.promoThreshold,
                     promoDiscount: payload.promoVal !== undefined ? payload.promoVal : prev.promoDiscount,
-
                     audioEnabled: payload.sound !== undefined ? payload.sound : prev.audioEnabled,
                     volume: payload.vol !== undefined ? payload.vol : prev.volume,
-
                     wifiSsid: payload.wifiSsid !== undefined ? payload.wifiSsid : prev.wifiSsid,
                     mpToken: payload.mpToken !== undefined ? payload.mpToken : prev.mpToken,
-                    googleScriptUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleScriptUrl,
+                    googleUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleScriptUrl,
                     manifestUrl: payload.fwUrl !== undefined ? payload.fwUrl : prev.manifestUrl
                 }));
             } catch (e) {
@@ -110,19 +104,16 @@ const DeviceDetails = () => {
         if (statusMsg) {
             console.log('[DeviceDetails] MQTT STATUS RECEIVED:', statusMsg);
 
-            // Check if it's a file list (starts with "FILES:")
             if (statusMsg.startsWith('FILES:')) {
                 try {
                     const jsonStr = statusMsg.replace('FILES:', '').trim();
                     const fileArray = JSON.parse(jsonStr);
-                    // Extract just the names for the UI, or keep full objects if needed
                     const fileList = fileArray.map(f => typeof f === 'string' ? f : f.name);
                     setFiles(fileList);
                 } catch (e) {
                     console.error('Error parsing files JSON:', e);
                 }
             }
-            // Check if it's CSV logs (starts with "LOGS:")
             else if (statusMsg.startsWith('LOGS:')) {
                 const csvData = statusMsg.replace('LOGS:', '').trim();
                 if (!csvData) {
@@ -142,7 +133,7 @@ const DeviceDetails = () => {
                     }
                     return null;
                 }).filter(l => l);
-                setLogs(parsedLogs.reverse()); // Show newest first
+                setLogs(parsedLogs.reverse());
             }
         }
     }, [statusMsg]);
@@ -158,11 +149,9 @@ const DeviceDetails = () => {
         setConfig(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSaveAll = () => {
-        const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
-
-        // Map internal state names to what the ESP32 expects
-        const payload = {
+    // Mapping of internal state fields to ESP32 firmware keys
+    const getPayload = (fields = null) => {
+        const fullMapping = {
             devName: config.devName,
             price: parseFloat(config.price),
             mode: parseInt(config.mode),
@@ -182,26 +171,44 @@ const DeviceDetails = () => {
             fwUrl: config.manifestUrl
         };
 
-        // Security: If mpToken is masked, do NOT send it back
+        if (!fields) return fullMapping;
+
+        const partial = {};
+        fields.forEach(f => {
+            if (fullMapping[f] !== undefined) partial[f] = fullMapping[f];
+        });
+        return partial;
+    };
+
+    const handleSaveSection = (sectionName, fields) => {
+        const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
+        const payload = getPayload(fields);
+
         if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
             delete payload.mpToken;
         }
 
-        console.log('[DeviceDetails] Sending Save Payload:', payload);
+        console.log(`[DeviceDetails] Saving section [${sectionName}]:`, payload);
         publish(topic, JSON.stringify(payload));
-        alert('Configuración guardada y enviada al dispositivo.');
+        alert(`Configuración de ${sectionName} enviada.`);
+    };
+
+    const handleSaveAll = () => {
+        const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
+        const payload = getPayload();
+
+        if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
+            delete payload.mpToken;
+        }
+
+        console.log('[DeviceDetails] Sending Full Save Payload:', payload);
+        publish(topic, JSON.stringify(payload));
+        alert('Toda la configuración enviada al dispositivo.');
     };
 
     const sendCommand = (cmd, payload = {}) => {
         publish(`qrsolo/${normalizedUid}/cmnd/${cmd}`, JSON.stringify(payload));
         alert(`Comando ${cmd} enviado.`);
-    };
-
-    const formatToken = (token) => {
-        if (!token) return '';
-        if (showMpToken) return token;
-        if (token.length <= 5) return token;
-        return `...${token.slice(-5)}`;
     };
 
     return (
@@ -223,7 +230,6 @@ const DeviceDetails = () => {
                 <div className="flex gap-2">
                     <button
                         onClick={() => {
-                            console.log('[DeviceDetails] Manual refresh requested');
                             publish(`qrsolo/${uid}/cmnd/get_settings`, '{}');
                             publish(`qrsolo/${uid}/cmnd/get_logs`, '{}');
                             publish(`qrsolo/${uid}/cmnd/list_ads`, '{}');
@@ -238,19 +244,21 @@ const DeviceDetails = () => {
                         onClick={handleSaveAll}
                         className="px-5 py-2 bg-blue-500 hover:bg-blue-600 rounded-full text-sm font-bold transition shadow-lg shadow-blue-500/20"
                     >
-                        Guardar
+                        Guardar Todo
                     </button>
                 </div>
             </div>
 
-            {/* Main Grid Container - Full Width on Desktop */}
+            {/* Main Grid Container */}
             <div className="w-full max-w-[1600px] mx-auto px-4 py-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
 
-                    {/* COLUMN 1: Primary Settings */}
+                    {/* COLUMN 1: Operational */}
                     <div className="space-y-6">
-                        {/* GENERAL */}
-                        <Section title="GENERAL">
+                        <Section
+                            title="CONFIGURACIÓN OPERATIVA"
+                            onSave={() => handleSaveSection('Operación', ['mode', 'price', 'pulseDur', 'fixedUnits', 'fixedType', 'staticQrText', 'promoEn', 'promoThr', 'promoVal'])}
+                        >
                             <InputGroup label="Nombre del Dispositivo">
                                 <Input value={config.devName} onChange={(e) => handleChange('devName', e.target.value)} />
                             </InputGroup>
@@ -275,7 +283,6 @@ const DeviceDetails = () => {
                                 </div>
                             </div>
 
-                            {/* Static Mode Config */}
                             {config.mode === 2 && (
                                 <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-4 animate-in fade-in slide-in-from-top-2">
                                     <h3 className="text-xs font-bold text-blue-400 uppercase">Configuración QR Fijo</h3>
@@ -299,30 +306,35 @@ const DeviceDetails = () => {
                                     </InputGroup>
                                 </div>
                             )}
-                        </Section>
 
-                        {/* PROMOS */}
-                        {config.mode !== 2 && (
-                            <Section title="PROMOCIONES">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <InputGroup label="Umbral (Mínimo)">
-                                        <Input type="number" value={config.promoThreshold} onChange={(e) => handleChange('promoThreshold', e.target.value)} />
-                                    </InputGroup>
-                                    <InputGroup label="Descuento (%)">
-                                        <Input type="number" value={config.promoDiscount} onChange={(e) => handleChange('promoDiscount', e.target.value)} />
-                                    </InputGroup>
+                            {config.mode !== 2 && (
+                                <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                                            <span className="text-sm font-bold text-yellow-500/90 uppercase tracking-tight">Habilitar Promociones</span>
+                                        </div>
+                                        <Switch checked={config.promoEnabled} onChange={() => handleChange('promoEnabled', !config.promoEnabled)} />
+                                    </div>
+
+                                    {config.promoEnabled && (
+                                        <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-1">
+                                            <InputGroup label="Umbral (Mínimo)">
+                                                <Input type="number" value={config.promoThreshold} onChange={(e) => handleChange('promoThreshold', e.target.value)} />
+                                            </InputGroup>
+                                            <InputGroup label="Descuento (%)">
+                                                <Input type="number" value={config.promoDiscount} onChange={(e) => handleChange('promoDiscount', e.target.value)} />
+                                            </InputGroup>
+                                        </div>
+                                    )}
                                 </div>
-                                <button className="w-full py-3 mt-2 border border-dashed border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-gray-500 transition text-sm flex items-center justify-center gap-2">
-                                    <Plus size={16} /> Agregar Regla de Descuento
-                                </button>
-                            </Section>
-                        )}
+                            )}
+                        </Section>
                     </div>
 
-                    {/* COLUMN 2: Connectivity & Hardware */}
+                    {/* COLUMN 2: Network & Services */}
                     <div className="space-y-6">
-                        {/* RED Y API */}
-                        <Section title="RED Y API">
+                        <Section title="RED WIFI" onSave={() => handleSaveSection('WiFi', ['wifiSsid', 'wifiPass', 'devName'])}>
                             <div className="grid grid-cols-2 gap-4">
                                 <InputGroup label="WiFi SSID">
                                     <Input value={config.wifiSsid} onChange={(e) => handleChange('wifiSsid', e.target.value)} />
@@ -331,14 +343,14 @@ const DeviceDetails = () => {
                                     <Input type="password" value={config.wifiPass} onChange={(e) => handleChange('wifiPass', e.target.value)} />
                                 </InputGroup>
                             </div>
+                        </Section>
 
-                            <InputGroup label="Mercado Pago Token">
+                        <Section title="MERCADO PAGO" onSave={() => handleSaveSection('Mercado Pago', ['mpToken'])}>
+                            <InputGroup label="Access Token">
                                 <div className="relative">
                                     <Input
                                         type={showMpToken ? "text" : "password"}
                                         value={config.mpToken}
-                                        // We keep the real value in state, but rendering logic could be complex if we wanted to mask while editing.
-                                        // For simplicity: standard password input toggle
                                         onChange={(e) => handleChange('mpToken', e.target.value)}
                                         className="text-xs font-mono pr-10"
                                     />
@@ -349,20 +361,31 @@ const DeviceDetails = () => {
                                         {showMpToken ? <EyeOff size={16} /> : <Eye size={16} />}
                                     </button>
                                 </div>
-                                {/* Display the masked "ending in" hint if we have a value and it's hidden */}
-                                {!showMpToken && config.mpToken && config.mpToken.length > 5 && (
-                                    <p className="text-[10px] text-green-500 mt-1 font-mono text-right">
-                                        Activo • Termina en ...{config.mpToken.slice(-5)}
-                                    </p>
-                                )}
                             </InputGroup>
+                        </Section>
 
-                            <InputGroup label="Google Script URL">
+                        <Section title="GOOGLE CONFIG" onSave={() => handleSaveSection('Google Script', ['googleUrl'])}>
+                            <InputGroup label="Script URL">
                                 <Input value={config.googleScriptUrl} onChange={(e) => handleChange('googleScriptUrl', e.target.value)} className="text-xs font-mono" />
                             </InputGroup>
                         </Section>
 
-                        {/* PRUEBAS HW */}
+                        <Section title="SONIDO Y VOLUMEN" onSave={() => handleSaveSection('Sonido', ['sound', 'vol'])}>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <Volume2 className="text-blue-400" size={20} />
+                                    <span className="font-medium text-sm">Altavoz del Dispositivo</span>
+                                </div>
+                                <Switch checked={config.audioEnabled} onChange={() => handleChange('audioEnabled', !config.audioEnabled)} />
+                            </div>
+                            <input
+                                type="range" min="0" max="100"
+                                value={config.volume}
+                                onChange={(e) => handleChange('volume', e.target.value)}
+                                className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                            />
+                        </Section>
+
                         <Section title="PRUEBAS HW">
                             <div className="grid grid-cols-2 gap-4">
                                 <ActionButton
@@ -377,99 +400,58 @@ const DeviceDetails = () => {
                                 />
                             </div>
                         </Section>
-
-                        {/* SONIDO */}
-                        <Section title="SONIDO">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                    <Volume2 className="text-blue-400" size={20} />
-                                    <span className="font-medium">Sonidos de Interfaz</span>
-                                </div>
-                                <Switch checked={config.audioEnabled} onChange={() => handleChange('audioEnabled', !config.audioEnabled)} />
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-xs mb-2 text-gray-400">
-                                    <span>Volumen</span>
-                                    <span>{config.volume}%</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="0" max="100"
-                                    value={config.volume}
-                                    onChange={(e) => handleChange('volume', e.target.value)}
-                                    className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                />
-                            </div>
-                        </Section>
                     </div>
 
-                    {/* COLUMN 3: Management & Logs */}
+                    {/* COLUMN 3: Logs & Tools */}
                     <div className="space-y-6">
-                        {/* HISTORIAL */}
-                        <Section title="HISTORIAL" headerAction={<div className="bg-green-500/10 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/20">MicroSD OK</div>}>
-                            <div className="bg-[#1a202a] rounded-xl overflow-hidden text-sm">
-                                <div className="grid grid-cols-3 p-3 bg-[#1f2630] text-gray-400 text-xs font-bold uppercase tracking-wider">
+                        <Section title="HISTORIAL" headerAction={<div className="bg-green-500/10 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/20 font-bold font-mono">SD OK</div>}>
+                            <div className="bg-[#1a202a] rounded-xl overflow-hidden text-sm border border-gray-800/50">
+                                <div className="grid grid-cols-3 p-3 bg-[#1f2630] text-gray-500 text-[10px] font-black uppercase tracking-widest">
                                     <div>Evento</div>
                                     <div>Detalle</div>
                                     <div className="text-right">Hora</div>
                                 </div>
                                 <div className="divide-y divide-gray-800 max-h-[300px] overflow-y-auto custom-scrollbar">
                                     {logs.length > 0 ? logs.map((log, i) => (
-                                        <div key={i} className="grid grid-cols-3 p-3 hover:bg-white/5 transition">
+                                        <div key={i} className="grid grid-cols-3 p-3 hover:bg-white/5 transition border-l-2 border-transparent hover:border-blue-500">
                                             <span className="text-gray-300 text-xs truncate">{log.ref}</span>
                                             <span className={log.amount > 0 ? "text-blue-400 font-bold" : "text-gray-400"}>
                                                 {log.amount > 0 ? `$${log.amount.toFixed(2)}` : '-'}
                                             </span>
-                                            <div className="text-right text-gray-500 text-[10px]">{log.time}</div>
+                                            <div className="text-right text-gray-500 text-[10px] font-mono">{log.time}</div>
                                         </div>
                                     )) : (
-                                        <div className="p-10 text-center text-gray-500 italic">No hay registros disponibles</div>
+                                        <div className="p-10 text-center text-gray-600 italic text-xs">No hay registros hoy</div>
                                     )}
-                                </div>
-                                <div className="p-3 text-center border-t border-gray-800">
-                                    <button className="text-blue-400 text-xs font-bold hover:text-blue-300">Ver todos los logs</button>
                                 </div>
                             </div>
                         </Section>
 
-                        {/* PUBLICIDAD */}
                         <Section title="PUBLICIDAD (PANTALLA)">
                             <div className="grid grid-cols-2 gap-4">
                                 {files.length > 0 ? files.map((file, i) => (
                                     <div key={i} className="aspect-video bg-[#1a202a] rounded-xl border border-gray-700 flex flex-col items-center justify-center relative overflow-hidden group">
-                                        <div
-                                            onClick={() => sendCommand('delete_ad', file)}
-                                            className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded flex items-center justify-center text-xs shadow-md z-10 cursor-pointer hover:bg-red-600 transition"
-                                        >x</div>
-                                        <div className="w-12 h-16 bg-blue-500/20 border border-blue-500/30 rounded mb-2 flex items-center justify-center">
-                                            <ImageIcon size={20} className="text-blue-500/50" />
-                                        </div>
-                                        <p className="text-[10px] text-gray-400 px-2 truncate w-full text-center">{file}</p>
+                                        <div onClick={() => sendCommand('delete_ad', file)} className="absolute top-2 right-2 bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white w-6 h-6 rounded flex items-center justify-center text-xs shadow-md z-10 cursor-pointer transition">x</div>
+                                        <ImageIcon size={20} className="text-blue-500/30 mb-2" />
+                                        <p className="text-[10px] text-gray-500 px-2 truncate w-full text-center font-mono">{file}</p>
                                     </div>
                                 )) : (
-                                    <div className="col-span-2 p-6 text-center text-gray-600 italic border border-dashed border-gray-800 rounded-xl bg-black/10">
-                                        No hay archivos en la SD
-                                    </div>
+                                    <div className="col-span-2 p-8 text-center text-gray-600 italic text-xs border border-dashed border-gray-800 rounded-xl bg-black/5">No hay archivos en la SD</div>
                                 )}
-                                <div className="aspect-video bg-[#1a202a] rounded-xl border border-dashed border-gray-700 flex flex-col items-center justify-center hover:bg-white/5 cursor-pointer transition"
-                                    onClick={() => alert('Próximamente: Subida directa vía HTTP')}>
-                                    <ImageIcon className="text-gray-500 mb-2" />
-                                    <p className="text-[10px] text-gray-500">Subir Archivo</p>
+                                <div className="aspect-video bg-[#1a202a] rounded-xl border border-dashed border-gray-700 flex flex-col items-center justify-center hover:bg-white/5 cursor-pointer transition" onClick={() => alert('Solo carga via SD manual por ahora')}>
+                                    <Plus className="text-gray-600 mb-1" size={16} />
+                                    <p className="text-[10px] text-gray-600 font-bold">Añadir JPG</p>
                                 </div>
                             </div>
-                            <p className="mt-2 text-[10px] text-gray-600">Recomendado: JPG, 320x240px. Max 150KB.</p>
                         </Section>
 
-                        {/* ACTUALIZACION */}
-                        <Section title="ACTUALIZACIÓN">
-                            <div className="bg-[#1a202a] rounded-xl p-4 border border-gray-800 space-y-4">
-                                <InputGroup label="OTA Manifest URL">
-                                    <Input value={config.manifestUrl} onChange={(e) => handleChange('manifestUrl', e.target.value)} className="text-xs" placeholder="https://..." />
-                                </InputGroup>
-                                <button className="w-full py-3 bg-[#1f2630] hover:bg-[#252d38] text-blue-400 font-bold rounded-lg text-sm transition flex items-center justify-center gap-2">
-                                    <Upload size={16} /> Buscar Actualizaciones
-                                </button>
-                            </div>
+                        <Section title="ACTUALIZACIÓN FRM" onSave={() => handleSaveSection('OTA', ['fwUrl'])}>
+                            <InputGroup label="OTA Manifest URL">
+                                <Input value={config.manifestUrl} onChange={(e) => handleChange('manifestUrl', e.target.value)} className="text-[10px] font-mono" placeholder="https://..." />
+                            </InputGroup>
+                            <button className="w-full py-3 mt-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-black rounded-lg text-[10px] uppercase tracking-[0.2em] transition border border-blue-500/20">
+                                Forzar Búsqueda
+                            </button>
                         </Section>
                     </div>
                 </div>
@@ -478,30 +460,41 @@ const DeviceDetails = () => {
     );
 };
 
-// --- Reusable Components ---
+// --- Child Components ---
 
-const Section = ({ title, headerAction, children }) => (
-    <section className="bg-[#161b22] border border-[#1f2630] rounded-2xl p-5 shadow-sm space-y-5 h-full">
-        <div className="flex justify-between items-center -mt-1 mb-2">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{title}</h2>
+const Section = ({ title, headerAction, onSave, children }) => (
+    <section className="bg-[#161b22] border border-[#1f2630] rounded-2xl p-5 shadow-sm flex flex-col h-full hover:border-[#252d38] transition-colors">
+        <div className="flex justify-between items-center -mt-1 mb-5">
+            <h2 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{title}</h2>
             {headerAction}
         </div>
-        <div>
+        <div className="flex-1 space-y-5">
             {children}
         </div>
+        {onSave && (
+            <div className="mt-6 pt-4 border-t border-gray-800/50 flex justify-end">
+                <button
+                    onClick={onSave}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded text-[10px] font-black uppercase tracking-widest transition-all border border-blue-500/20 hover:border-blue-500/40"
+                >
+                    <Save size={12} />
+                    Guardar {title.split(" ")[0]}
+                </button>
+            </div>
+        )}
     </section>
 );
 
 const InputGroup = ({ label, children }) => (
     <div className="space-y-2">
-        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide">{label}</label>
+        <label className="block text-[10px] font-black text-gray-600 uppercase tracking-widest">{label}</label>
         {children}
     </div>
 );
 
 const Input = ({ className = "", ...props }) => (
     <input
-        className={`w-full bg-[#1c222b] border border-gray-800 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition ${className}`}
+        className={`w-full bg-[#1c222b] border border-gray-800/50 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition placeholder:text-gray-700 ${className}`}
         {...props}
     />
 );
@@ -509,7 +502,7 @@ const Input = ({ className = "", ...props }) => (
 const ModeTab = ({ active, onClick, icon, label }) => (
     <button
         onClick={onClick}
-        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${active ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-300'}`}
+        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
     >
         {icon}
         {label}
@@ -517,15 +510,15 @@ const ModeTab = ({ active, onClick, icon, label }) => (
 );
 
 const Switch = ({ checked, onChange }) => (
-    <button onClick={onChange} className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 flex items-center ${checked ? 'bg-blue-500' : 'bg-gray-700'}`}>
-        <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`}></div>
+    <button onClick={onChange} className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 flex items-center ${checked ? 'bg-blue-500' : 'bg-gray-800'}`}>
+        <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${checked ? 'translate-x-4' : 'translate-x-0'}`}></div>
     </button>
 );
 
 const ActionButton = ({ icon, label, onClick }) => (
-    <button onClick={onClick} className="bg-[#1f2630] hover:bg-[#252d38] border border-gray-700 hover:border-gray-600 text-white py-6 rounded-xl flex flex-col items-center justify-center transition group">
-        <div className="text-blue-500 group-hover:scale-110 transition-transform">{icon}</div>
-        <span className="text-sm font-bold mt-2">{label}</span>
+    <button onClick={onClick} className="bg-[#1f2630] hover:bg-blue-500/10 border border-gray-800 hover:border-blue-500/30 text-white py-5 rounded-xl flex flex-col items-center justify-center transition group">
+        <div className="text-gray-600 group-hover:text-blue-500 group-hover:scale-110 transition-all">{icon}</div>
+        <span className="text-[10px] font-black uppercase tracking-widest mt-2">{label}</span>
     </button>
 );
 
