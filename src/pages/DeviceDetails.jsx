@@ -67,7 +67,7 @@ const DeviceDetails = () => {
     useEffect(() => {
         if (!user || !normalizedUid) return;
 
-        console.log(`[DeviceDetails] Fetching history from Firestore for User...`);
+        console.log(`[DeviceDetails] Listening for Firestore logs. User: ${user.uid}, Device: ${normalizedUid}`);
         // Remove deviceUid filter to avoid composite index requirement
         const q = query(
             collection(db, 'users', user.uid, 'history'),
@@ -93,7 +93,14 @@ const DeviceDetails = () => {
                     isCloud: true
                 }));
 
-            setLogs(filteredLogs);
+            console.log(`[DeviceDetails] Firestore Sync: Received ${filteredLogs.length} logs for ${normalizedUid}`);
+            setLogs(prev => {
+                // If we have local MQTT logs, we want to keep them until they appear in Firestore
+                // This is a simple merge logic
+                const fsIds = new Set(allLogs.map(l => l.id));
+                const localOnly = prev.filter(l => !l.isCloud && !fsIds.has(l.id));
+                return [...localOnly, ...filteredLogs];
+            });
         }, (err) => {
             console.error('[DeviceDetails] History listener error:', err);
         });
@@ -155,6 +162,26 @@ const DeviceDetails = () => {
                     setFiles(fileList);
                 } catch (e) {
                     console.error('Error parsing files JSON:', e);
+                }
+            }
+            else if (statusMsg.startsWith('LOG_NEW:')) {
+                // Real-time log injection via MQTT
+                // Format: LOG_NEW:amount,duration,ref
+                try {
+                    const content = statusMsg.replace('LOG_NEW:', '').trim();
+                    const [amount, duration, ref] = content.split(',');
+                    const newLog = {
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                        amount: parseFloat(amount),
+                        duration: parseInt(duration),
+                        ref: ref,
+                        isCloud: false,
+                        id: `local_${Date.now()}` // Temporary ID
+                    };
+                    console.log('[DeviceDetails] MQTT LOG RECEIVED:', newLog);
+                    setLogs(prev => [newLog, ...prev]);
+                } catch (e) {
+                    console.error('Error parsing real-time log:', e);
                 }
             }
             else if (statusMsg.startsWith('WIFI_LIST:')) {
