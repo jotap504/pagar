@@ -43,7 +43,7 @@ try {
     process.exit(1);
 }
 
-const db = admin.firestore();
+const db = admin.app().firestore("pagar-webonline");
 
 // 2. MQTT Config
 const MQTT_BROKER = "mqtt://broker.emqx.io";
