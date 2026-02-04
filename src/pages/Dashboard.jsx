@@ -320,7 +320,7 @@ const DeviceListItem = ({ uid, data, isOnline, onUnlink }) => (
         </div>
 
         <div className="flex-1 min-w-0">
-            <h4 className="font-bold text-white text-sm truncate">{data.devName || `Equipo Pagar`}</h4>
+            <h4 className="font-bold text-white text-sm truncate">{data.name || data.devName || `Equipo Pagar`}</h4>
             <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] text-gray-500 font-mono uppercase tracking-tighter">ID: {uid}</span>
             </div>
