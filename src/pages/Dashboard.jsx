@@ -126,6 +126,43 @@ const Dashboard = () => {
         }
     };
 
+    // 4. Fetch Global History for Stats & Activity
+    const [globalLogs, setGlobalLogs] = useState([]);
+    const [stats, setStats] = useState({ todayRevenue: 0 });
+
+    useEffect(() => {
+        if (!user) return;
+
+        console.log('[Dashboard] Fetching global history for stats...');
+        const q = query(
+            collection(db, 'users', user.uid, 'history'),
+            orderBy('timestamp', 'desc'),
+            limit(50)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const logs = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                date: doc.data().timestamp?.toDate() || new Date()
+            }));
+
+            setGlobalLogs(logs);
+
+            // Calculate Today's Revenue
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const revenue = logs
+                .filter(log => log.date >= today)
+                .reduce((acc, log) => acc + (log.amount || 0), 0);
+
+            setStats({ todayRevenue: revenue });
+        });
+
+        return unsubscribe;
+    }, [user]);
+
     const devicesList = claimedUids.map(uid => {
         const fsData = firestoreStatuses[uid] || {};
         const mqttData = deviceStates[uid] || {};
@@ -180,42 +217,77 @@ const Dashboard = () => {
                             <span className="text-xs text-gray-500">de {claimedUids.length}</span>
                         </div>
                     </div>
-                    {/* Placeholder for real revenue stats from Firebase later */}
+
                     <div className="bg-[#1f2630] rounded-2xl p-5 border border-gray-800 shadow-sm relative overflow-hidden group">
                         <div className="absolute -right-4 -top-4 text-green-500/10 group-hover:text-green-500/20 transition-all"><BarChart2 size={100} /></div>
-                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Ventas Hoy (Estimado)</p>
-                        <h2 className="text-3xl font-black text-white">$ 0.00</h2>
+                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Ventas Hoy (Reales)</p>
+                        <h2 className="text-3xl font-black text-white">$ {stats.todayRevenue.toFixed(2)}</h2>
+                    </div>
+
+                    <div className="bg-[#1f2630] rounded-2xl p-5 border border-gray-800 shadow-sm relative overflow-hidden group">
+                        <div className="absolute -right-4 -top-4 text-purple-500/10 group-hover:text-purple-500/20 transition-all"><History size={100} /></div>
+                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Actividad Reciente</p>
+                        <h2 className="text-3xl font-black text-white">{globalLogs.length}</h2>
+                        <span className="text-xs text-gray-500">registros totales</span>
                     </div>
                 </div>
 
-                {/* Main List */}
-                <div>
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-gray-500">Mis Dispositivos</h3>
-                        <button onClick={() => setShowClaimModal(true)} className="md:hidden text-blue-500 p-1"><Plus size={24} /></button>
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left: Device List */}
+                    <div className="lg:col-span-2 space-y-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-black text-xs uppercase tracking-[0.2em] text-gray-500">Mis Dispositivos</h3>
+                            <button onClick={() => setShowClaimModal(true)} className="md:hidden text-blue-500 p-1"><Plus size={24} /></button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {devicesList.map(({ uid, data, isOnline }) => (
+                                <DeviceListItem
+                                    key={uid}
+                                    uid={uid}
+                                    data={data}
+                                    isOnline={isOnline}
+                                    onUnlink={() => handleUnlink(uid)}
+                                />
+                            ))}
+
+                            {claimedUids.length === 0 && (
+                                <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-800 rounded-3xl group hover:border-blue-500/30 transition-all cursor-pointer" onClick={() => setShowClaimModal(true)}>
+                                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform">
+                                        <Plus size={32} />
+                                    </div>
+                                    <h4 className="text-white font-bold mb-1">No tienes equipos vinculados</h4>
+                                    <p className="text-xs text-gray-500 max-w-[250px] mx-auto">Vincular tu placa es muy fácil. Solo necesitas el ID y la contraseña de admin.</p>
+                                    <button className="mt-6 px-8 py-2.5 bg-blue-600 text-white rounded-full text-xs font-bold shadow-lg shadow-blue-500/20">Vincular Mi Primer Equipo</button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {devicesList.map(({ uid, data, isOnline }) => (
-                            <DeviceListItem
-                                key={uid}
-                                uid={uid}
-                                data={data}
-                                isOnline={isOnline}
-                                onUnlink={() => handleUnlink(uid)}
-                            />
-                        ))}
-
-                        {claimedUids.length === 0 && (
-                            <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-800 rounded-3xl group hover:border-blue-500/30 transition-all cursor-pointer" onClick={() => setShowClaimModal(true)}>
-                                <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform">
-                                    <Plus size={32} />
-                                </div>
-                                <h4 className="text-white font-bold mb-1">No tienes equipos vinculados</h4>
-                                <p className="text-xs text-gray-500 max-w-[250px] mx-auto">Vincular tu placa es muy fácil. Solo necesitas el ID y la contraseña de admin.</p>
-                                <button className="mt-6 px-8 py-2.5 bg-blue-600 text-white rounded-full text-xs font-bold shadow-lg shadow-blue-500/20">Vincular Mi Primer Equipo</button>
+                    {/* Right: Global Activity Feed */}
+                    <div className="space-y-4">
+                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-gray-500">Actividad Global</h3>
+                        <div className="bg-[#1f2630] rounded-2xl border border-gray-800 overflow-hidden">
+                            <div className="max-h-[500px] overflow-y-auto custom-scrollbar divide-y divide-gray-800/50">
+                                {globalLogs.length > 0 ? globalLogs.map((log) => (
+                                    <div key={log.id} className="p-4 hover:bg-white/5 transition flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-gray-200 truncate">{log.ref || 'Venta'}</p>
+                                            <p className="text-[10px] text-gray-500 font-mono">ID: {log.deviceUid}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs font-black text-blue-400">${log.amount.toFixed(2)}</p>
+                                            <p className="text-[10px] text-gray-600 font-mono">
+                                                {log.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="p-10 text-center text-gray-600 italic text-xs">Sin actividad registrada</div>
+                                )}
                             </div>
-                        )}
+                        </div>
                     </div>
                 </div>
             </div>
