@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMqtt } from '../context/MqttContext';
+import { useAuth } from '../context/AuthContext';
+import { db } from '../firebase';
+import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff } from 'lucide-react';
 
 const DeviceDetails = () => {
     const { uid } = useParams();
     const navigate = useNavigate();
     const normalizedUid = uid?.toUpperCase();
+    const { user } = useAuth();
     const { publish, subscribe, messages, status } = useMqtt();
     const hasRequestedSettings = useRef(false);
     const lastProcessedMessageRef = useRef('');
@@ -44,7 +48,7 @@ const DeviceDetails = () => {
     const [availableWifi, setAvailableWifi] = useState([]);
     const [isScanning, setIsScanning] = useState(false);
 
-    // Sync with device
+    // 1. Sync with device via MQTT
     useEffect(() => {
         if (status === 'connected' && normalizedUid && !hasRequestedSettings.current) {
             console.log(`[DeviceDetails] Subscribing to qrsolo/${normalizedUid}/stat/#`);
@@ -53,12 +57,45 @@ const DeviceDetails = () => {
 
             console.log('[DeviceDetails] Requesting full device state...');
             publish(`qrsolo/${normalizedUid}/cmnd/get_settings`, '{}');
-            publish(`qrsolo/${normalizedUid}/cmnd/get_logs`, '{}');
             publish(`qrsolo/${normalizedUid}/cmnd/list_ads`, '{}');
 
             hasRequestedSettings.current = true;
         }
     }, [status, normalizedUid, subscribe, publish]);
+
+    // 2. Fetch Historical Logs from Firestore
+    useEffect(() => {
+        if (!user || !normalizedUid) return;
+
+        console.log(`[DeviceDetails] Fetching history from Firestore for: ${normalizedUid}`);
+        const q = query(
+            collection(db, 'users', user.uid, 'history'),
+            where('deviceUid', '==', normalizedUid),
+            orderBy('timestamp', 'desc'),
+            limit(100)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const firestoreLogs = snapshot.docs.map(doc => {
+                const data = doc.data();
+                // Convert Firestore Timestamp to formatted time
+                const date = data.timestamp ? data.timestamp.toDate() : new Date();
+                return {
+                    time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    amount: data.amount,
+                    duration: data.duration,
+                    ref: data.ref,
+                    isCloud: true
+                };
+            });
+
+            // Merge with local logs if any? 
+            // For now, let Firestore be the source of truth for history
+            setLogs(firestoreLogs);
+        });
+
+        return unsubscribe;
+    }, [user, normalizedUid]);
 
     // Handle settings and status messages
     const settingsTopic = `qrsolo/${normalizedUid}/stat/settings`;
@@ -114,42 +151,6 @@ const DeviceDetails = () => {
                     setFiles(fileList);
                 } catch (e) {
                     console.error('Error parsing files JSON:', e);
-                }
-            }
-            else if (statusMsg.startsWith('LOGS:')) {
-                const csvData = statusMsg.replace('LOGS:', '').trim();
-                if (!csvData) {
-                    setLogs([]);
-                    return;
-                }
-                const lines = csvData.split('\n');
-                const parsedLogs = lines.map(line => {
-                    const parts = line.split(',');
-                    if (parts.length >= 3) {
-                        return {
-                            time: parts[0],
-                            amount: parseFloat(parts[1]),
-                            duration: parseInt(parts[2]),
-                            ref: parts[3] || 'Evento'
-                        };
-                    }
-                    return null;
-                }).filter(l => l);
-                setLogs(parsedLogs.reverse());
-            }
-            else if (statusMsg.startsWith('LOG_NEW:')) {
-                try {
-                    const data = statusMsg.replace('LOG_NEW:', '').trim();
-                    const [amount, duration, ref] = data.split(',');
-                    const newLog = {
-                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                        amount: parseFloat(amount),
-                        duration: parseInt(duration),
-                        ref: ref || 'Evento'
-                    };
-                    setLogs(prev => [newLog, ...prev]);
-                } catch (e) {
-                    console.error('Error parsing new log:', e);
                 }
             }
             else if (statusMsg.startsWith('WIFI_LIST:')) {
