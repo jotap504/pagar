@@ -43,7 +43,9 @@ try {
     process.exit(1);
 }
 
-const db = admin.app().firestore("pagar-webonline");
+// Initialize Firestore with specific database ID
+const db = admin.firestore();
+db.settings({ databaseId: "pagar-webonline" });
 
 // 2. MQTT Config (HiveMQ Cloud)
 const MQTT_BROKER = "mqtts://ea2b35fec63e49deb5d3683f11b750b0.s1.eu.hivemq.cloud";
@@ -149,6 +151,24 @@ client.on('message', async (topic, message) => {
                 status: statusMsg,
                 lastActive: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
+        }
+        // Handle settings to update device name in Firestore
+        else if (topic.includes('/stat/settings')) {
+            try {
+                const parts = topic.split('/');
+                const uid = parts[1];
+                const settings = JSON.parse(statusMsg);
+
+                if (settings.devName) {
+                    log(`[Bridge] Updating name for ${uid}: ${settings.devName}`);
+                    await db.collection('devices').doc(uid).set({
+                        name: settings.devName,
+                        settings: settings // Backup full settings
+                    }, { merge: true });
+                }
+            } catch (e) {
+                logError('[Bridge] Error updating device settings', e);
+            }
         }
     } catch (e) {
         logError('[Bridge] Critical error processing message', e);

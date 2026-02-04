@@ -240,17 +240,37 @@ const DeviceDetails = () => {
         return partial;
     };
 
-    const handleSaveSection = (sectionName, fields) => {
-        const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
-        const payload = getPayload(fields);
-
-        if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
-            delete payload.mpToken;
+    const handleSaveSection = async (sectionName, fields) => {
+        // 1. Handle Cloud-Only fields (Device Name)
+        if (fields.includes('devName')) {
+            try {
+                console.log(`[DeviceDetails] Saving alias "${config.devName}" to Firestore...`);
+                await setDoc(doc(db, 'devices', normalizedUid), {
+                    name: config.devName
+                }, { merge: true });
+            } catch (e) {
+                console.error("Error saving device name to cloud:", e);
+                alert("Error al guardar el nombre en la nube");
+                // Don't return, try to save other fields
+            }
         }
 
-        console.log(`[DeviceDetails] Saving section [${sectionName}]:`, payload);
-        publish(topic, JSON.stringify(payload));
-        alert(`Configuración de ${sectionName} enviada.`);
+        // 2. Prepare Firmware Payload (Exclude devName to keep FW pure)
+        const firmwareFields = fields.filter(f => f !== 'devName');
+
+        if (firmwareFields.length > 0) {
+            const topic = `qrsolo/${normalizedUid}/cmnd/settings`;
+            const payload = getPayload(firmwareFields);
+
+            if (payload.mpToken && (payload.mpToken.startsWith('...') || payload.mpToken === '*****')) {
+                delete payload.mpToken;
+            }
+
+            console.log(`[DeviceDetails] Saving/Publishing firmware settings [${sectionName}]:`, payload);
+            publish(topic, JSON.stringify(payload));
+        }
+
+        alert(`Configuración de ${sectionName} guardada.`);
     };
 
     const handleSaveAll = () => {
@@ -311,10 +331,10 @@ const DeviceDetails = () => {
                     <div className="space-y-6">
                         <Section
                             title="CONFIGURACIÓN OPERATIVA"
-                            onSave={() => handleSaveSection('Operación', ['mode', 'price', 'pulseDur', 'fixedUnits', 'fixedType', 'staticQrText', 'promoEn', 'promoThr', 'promoVal'])}
+                            onSave={() => handleSaveSection('Operación', ['devName', 'mode', 'price', 'pulseDur', 'fixedUnits', 'fixedType', 'staticQrText', 'promoEn', 'promoThr', 'promoVal'])}
                         >
                             <InputGroup label="Nombre del Dispositivo">
-                                <Input value={config.devName} onChange={(e) => handleChange('devName', e.target.value)} />
+                                <Input value={config.devName} onChange={(e) => handleChange('devName', e.target.value)} placeholder={`Ej: Disp-${uid}`} />
                             </InputGroup>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -388,7 +408,7 @@ const DeviceDetails = () => {
 
                     {/* COLUMN 2: Network & Services */}
                     <div className="space-y-6">
-                        <Section title="RED WIFI" onSave={() => handleSaveSection('WiFi', ['wifiSsid', 'wifiPass', 'devName'])}>
+                        <Section title="RED WIFI" onSave={() => handleSaveSection('WiFi', ['wifiSsid', 'wifiPass'])}>
                             <div className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <InputGroup label="WiFi SSID">
