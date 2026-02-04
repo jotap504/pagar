@@ -452,12 +452,12 @@ const DeviceDetails = () => {
                                 <ActionButton
                                     icon={<Clock size={24} className="mb-1" />}
                                     label="1 min Remoto"
-                                    onClick={() => sendCommand('activate', { units: 1 })}
+                                    onClick={() => sendCommand('activate', { units: 1, ref: 'TEST_RELOJ' })}
                                 />
                                 <ActionButton
                                     icon={<Smartphone size={24} className="mb-1" />}
                                     label="5 Créditos"
-                                    onClick={() => sendCommand('activate', { units: 5 })}
+                                    onClick={() => sendCommand('activate', { units: 5, ref: 'TEST_CRED' })}
                                 />
                             </div>
                         </Section>
