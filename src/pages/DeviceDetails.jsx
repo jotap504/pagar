@@ -366,7 +366,7 @@ const DeviceDetails = () => {
 
                         <Section title="GOOGLE CONFIG" onSave={() => handleSaveSection('Google Script', ['googleUrl'])}>
                             <InputGroup label="Script URL">
-                                <Input value={config.googleScriptUrl} onChange={(e) => handleChange('googleScriptUrl', e.target.value)} className="text-xs font-mono" />
+                                <Input value={config.googleUrl} onChange={(e) => handleChange('googleUrl', e.target.value)} className="text-xs font-mono" />
                             </InputGroup>
                         </Section>
 
