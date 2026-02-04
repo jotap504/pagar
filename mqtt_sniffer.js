@@ -2,7 +2,7 @@ import mqtt from 'mqtt';
 
 // Configuration
 const BROKER_URL = 'mqtt://broker.emqx.io:1883'; // TCP connection for Node.js
-const TOPIC_FILTER = 'qrsolo/+/cmnd/#';
+const TOPIC_FILTER = 'qrsolo/#';
 
 console.log(`Connecting to broker ${BROKER_URL}...`);
 const client = mqtt.connect(BROKER_URL);

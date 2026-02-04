@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Reglas para la colección de usuarios
+    // Solo el dueño de la cuenta puede leer y escribir su documento
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Permitir acceso a la subcolección de historial
+      match /history/{logId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Reglas para la colección de dispositivos
+    // Permite buscar si un dispositivo existe y vincularlo
+    match /devices/{deviceId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

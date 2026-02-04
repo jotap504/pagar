@@ -25,12 +25,18 @@ const Dashboard = () => {
         if (!user) return;
 
         console.log('[Dashboard] Listening for claimed devices for:', user.uid);
-        const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                setClaimedUids(data.devices || []);
+        const unsubscribe = onSnapshot(
+            doc(db, 'users', user.uid),
+            (doc) => {
+                if (doc.exists()) {
+                    const data = doc.data();
+                    setClaimedUids(data.devices || []);
+                }
+            },
+            (err) => {
+                console.error('[Dashboard] Error in snapshot listener:', err);
             }
-        });
+        );
 
         return unsubscribe;
     }, [user]);

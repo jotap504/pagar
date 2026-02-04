@@ -63,8 +63,11 @@ const ClaimDevice = ({ onClaimed }) => {
                 return;
             }
 
+            console.log(`[Claim] User UID: ${auth.currentUser.uid}`);
             const userRef = doc(db, 'users', auth.currentUser.uid);
             const deviceMapRef = doc(db, 'devices', uid);
+
+            console.log(`[Claim] Attempting write to users/${auth.currentUser.uid} and devices/${uid}`);
 
             // 1. Update user's device list
             const userDoc = await getDoc(userRef);
@@ -89,7 +92,7 @@ const ClaimDevice = ({ onClaimed }) => {
         } catch (e) {
             console.error('Error saving claim:', e);
             setStep('error');
-            setErrorMsg('Error al guardar en la nube.');
+            setErrorMsg('Error al guardar en la nube: ' + e.message);
         }
     };
 
