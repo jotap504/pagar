@@ -4,7 +4,7 @@ import { useMqtt } from '../context/MqttContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff } from 'lucide-react';
+import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff, ImageMinus } from 'lucide-react';
 
 const DeviceDetails = () => {
     const { uid } = useParams();
@@ -39,7 +39,11 @@ const DeviceDetails = () => {
         mpToken: '',
         googleUrl: '',
         manifestUrl: '',
-        files: []
+        files: [],
+        adsEnabled: false,
+        adsInactivityTime: 30,
+        adsBlockDuringQr: false,
+        adsInterval: 0
     });
 
     const [showMpToken, setShowMpToken] = useState(false);
@@ -141,7 +145,14 @@ const DeviceDetails = () => {
                     wifiSsid: payload.wifiSsid !== undefined ? payload.wifiSsid : prev.wifiSsid,
                     mpToken: payload.mpToken !== undefined ? payload.mpToken : prev.mpToken,
                     googleUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleUrl,
-                    manifestUrl: payload.fwUrl !== undefined ? payload.fwUrl : prev.manifestUrl
+                    googleUrl: payload.googleUrl !== undefined ? payload.googleUrl : prev.googleUrl,
+                    manifestUrl: payload.fwUrl !== undefined ? payload.fwUrl : prev.manifestUrl,
+                    // Fix: Add missing ad settings sync
+                    adsEnabled: payload.adsEn !== undefined ? payload.adsEn : prev.adsEnabled,
+                    adsInactivityTime: payload.adsTime !== undefined ? payload.adsTime : prev.adsInactivityTime,
+                    // New: Add new ad settings
+                    adsBlockDuringQr: payload.adsBlock !== undefined ? payload.adsBlock : prev.adsBlockDuringQr,
+                    adsInterval: payload.adsInt !== undefined ? payload.adsInt : prev.adsInterval
                 }));
             } catch (e) {
                 console.error('Error parsing settings:', e);
@@ -226,6 +237,10 @@ const DeviceDetails = () => {
             vol: parseInt(config.volume),
             wifiSsid: config.wifiSsid,
             wifiPass: config.wifiPass,
+            adsEn: config.adsEnabled,
+            adsTime: parseInt(config.adsInactivityTime),
+            adsBlock: config.adsBlockDuringQr,
+            adsInt: parseInt(config.adsInterval),
             mpToken: config.mpToken,
             googleUrl: config.googleUrl,
             fwUrl: config.manifestUrl
@@ -540,7 +555,39 @@ const DeviceDetails = () => {
                             </div>
                         </Section>
 
-                        <Section title="PUBLICIDAD (SD CARD)">
+                        <Section title="PUBLICIDAD (SD CARD)" onSave={() => handleSaveSection('Publicidad', ['adsEn', 'adsTime', 'adsBlock', 'adsInt', 'delete_ad', 'list_ads'])}>
+                            {/* Ad Settings */}
+                            <div className="mb-4 pb-4 border-b border-gray-800">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <ImageMinus className="text-blue-400" size={20} />
+                                        <span className="font-medium text-sm">Habilitar Publicidad</span>
+                                    </div>
+                                    <Switch checked={config.adsEnabled} onChange={() => handleChange('adsEnabled', !config.adsEnabled)} />
+                                </div>
+
+                                {config.adsEnabled && (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                        <div className="grid grid-cols-2 gap-4 mt-3">
+                                            <InputGroup label="Tiempo Inactividad (seg)">
+                                                <Input type="number" value={config.adsInactivityTime} onChange={(e) => handleChange('adsInactivityTime', e.target.value)} />
+                                            </InputGroup>
+                                            <InputGroup label="Intervalo (seg)">
+                                                <Input type="number" value={config.adsInterval} onChange={(e) => handleChange('adsInterval', e.target.value)} placeholder="0 = Sin intervalo" />
+                                            </InputGroup>
+                                        </div>
+
+                                        <div className="flex items-center justify-between p-3 bg-red-500/5 border border-red-500/10 rounded-xl">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>
+                                                <span className="text-xs font-bold text-red-400 uppercase tracking-tight">Bloquear durante QR</span>
+                                            </div>
+                                            <Switch checked={config.adsBlockDuringQr} onChange={() => handleChange('adsBlockDuringQr', !config.adsBlockDuringQr)} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="space-y-3">
                                 {files.length > 0 ? files.map((file, i) => (
                                     <div key={i} className="flex items-center justify-between p-3 bg-[#1a202a] rounded-xl border border-gray-800 group hover:border-blue-500/30 transition-all">
