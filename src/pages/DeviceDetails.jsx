@@ -515,17 +515,52 @@ const DeviceDetails = () => {
                         </Section>
 
                         <Section title="PRUEBAS HW">
-                            <div className="grid grid-cols-2 gap-4">
-                                <ActionButton
-                                    icon={<Clock size={24} className="mb-1" />}
-                                    label="1 min Remoto"
-                                    onClick={() => sendCommand('activate', { units: 1, ref: 'TEST_RELOJ' })}
-                                />
-                                <ActionButton
-                                    icon={<Smartphone size={24} className="mb-1" />}
-                                    label="5 Créditos"
-                                    onClick={() => sendCommand('activate', { units: 5, ref: 'TEST_CRED' })}
-                                />
+                            {/* Time Test */}
+                            <div className="mb-4">
+                                <label className="block text-xs text-gray-400 mb-1 ml-1 uppercase font-bold">Prueba de Tiempo (Min)</label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        placeholder="1"
+                                        className="w-20"
+                                        id="testTimeInput"
+                                        defaultValue="1"
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            const val = document.getElementById('testTimeInput').value || 1;
+                                            sendCommand('activate', { units: parseInt(val), ref: 'TEST_TIME' });
+                                        }}
+                                        className="flex-1 bg-[#1f2630] hover:bg-[#252d38] border border-gray-700 hover:border-blue-500/50 text-blue-400 rounded-lg flex items-center justify-center gap-2 transition"
+                                    >
+                                        <Clock size={16} />
+                                        <span className="text-sm font-medium">Probar Tiempo</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Credit Test */}
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1 ml-1 uppercase font-bold">Prueba de Crédito (Pulsos)</label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        placeholder="1"
+                                        className="w-20"
+                                        id="testCreditInput"
+                                        defaultValue="1"
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            const val = document.getElementById('testCreditInput').value || 1;
+                                            sendCommand('activate', { units: parseInt(val), ref: 'TEST_CREDIT' });
+                                        }}
+                                        className="flex-1 bg-[#1f2630] hover:bg-[#252d38] border border-gray-700 hover:border-green-500/50 text-green-400 rounded-lg flex items-center justify-center gap-2 transition"
+                                    >
+                                        <Smartphone size={16} />
+                                        <span className="text-sm font-medium">Probar Crédito</span>
+                                    </button>
+                                </div>
                             </div>
                         </Section>
                     </div>
