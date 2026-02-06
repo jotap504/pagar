@@ -13,7 +13,7 @@ const Landing = () => {
             icon: <Gamepad2 size={24} />,
             desc: "Ideal para Arcades, Peluches y Videojuegos.",
             details: "Reemplaza las fichas físicas. El cliente escanea, paga y la máquina recibe los créditos automáticamente.",
-            image: "/landing_assets/qr1.png",
+            image: "/landing_assets/1770395618004.png", // QR Code Screen
             color: "from-purple-600 to-blue-600",
             applications: ["Salones de Arcade", "Máquinas de Peluche (Grua)", "Kiddie Rides"]
         },
@@ -23,7 +23,7 @@ const Landing = () => {
             icon: <Clock size={24} />,
             desc: "Perfecto para Canchas, Duchas e Iluminación.",
             details: "Cobra por minuto o fracción. El usuario elige cuánto tiempo quiere y el sistema activa el relé exactamente ese tiempo.",
-            image: "/landing_assets/qr2.png",
+            image: "/landing_assets/1770395561475.png", // Keypad Screen
             color: "from-blue-500 to-cyan-400",
             applications: ["Canchas de Padel/Tenis", "Duchas en Campings", "Sillones Masajeadores", "Aspiradoras de Autos"]
         },
@@ -38,6 +38,7 @@ const Landing = () => {
             applications: ["Dispensers de Agua Caliente", "Vending de Productos", "Molinetes de Acceso"]
         }
     ];
+
 
     return (
         <div className="bg-black text-white overflow-hidden font-sans">
@@ -58,7 +59,7 @@ const Landing = () => {
                         transition={{ duration: 0.8 }}
                         className="mb-8"
                     >
-                        <img src="/landing_assets/pagarlogo.png" alt="Pag.ar Logo" className="h-24 md:h-32 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
+                        <img src="/landing_assets/pagarlogo.png" alt="Pag.ar Logo" className="h-32 md:h-48 drop-shadow-[0_0_25px_rgba(59,130,246,0.6)]" />
                     </motion.div>
 
                     <motion.h1
