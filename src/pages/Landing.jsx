@@ -171,21 +171,15 @@ const Landing = () => {
                                     transition={{ duration: 0.5 }}
                                     className="relative z-10"
                                 >
-                                    {/* Tablet Shell */}
-                                    <div className="relative w-[600px] bg-gray-900 rounded-[2rem] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-gray-800 ring-1 ring-white/10">
-                                        <div className="absolute top-1/2 -right-1 w-1 h-20 bg-gray-800 rounded-r opacity-50"></div>
-
-                                        {/* Screen Content */}
-                                        <div className="relative bg-black rounded-xl overflow-hidden aspect-[4/3] border border-gray-800">
-                                            <img
-                                                src={modes[activeMode].image}
-                                                alt={modes[activeMode].title}
-                                                className="w-full h-full object-cover"
-                                            />
-                                            {/* Reflective shine */}
-                                            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none"></div>
-                                        </div>
-                                    </div>
+                                    {/* Clean Image Display */}
+                                    <motion.img
+                                        src={modes[activeMode].image}
+                                        alt={modes[activeMode].title}
+                                        className="w-full max-w-lg rounded-2xl shadow-2xl border border-white/10"
+                                        initial={{ scale: 0.9 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ duration: 0.5 }}
+                                    />
                                 </motion.div>
                             </AnimatePresence>
 
