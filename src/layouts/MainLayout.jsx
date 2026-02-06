@@ -7,8 +7,8 @@ const MainLayout = () => {
         <div className="min-h-screen bg-black text-white flex flex-col">
             <header className="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-md border-b border-white/10">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                    <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-                        Pagar
+                    <Link to="/" className="flex items-center">
+                        <img src="/landing_assets/Plogoheader.png" alt="Pag.ar" className="h-12 w-auto" />
                     </Link>
 
                     <nav className="hidden md:flex gap-6 items-center">

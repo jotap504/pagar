@@ -59,7 +59,7 @@ const Landing = () => {
                         transition={{ duration: 0.8 }}
                         className="mb-8"
                     >
-                        <img src="/landing_assets/pagarlogo.png" alt="Pag.ar Logo" className="h-32 md:h-48 drop-shadow-[0_0_25px_rgba(59,130,246,0.6)]" />
+                        <img src="/landing_assets/logosinfondo.png" alt="Pag.ar Logo" className="h-32 md:h-48 drop-shadow-[0_0_25px_rgba(59,130,246,0.6)]" />
                     </motion.div>
 
                     <motion.h1
