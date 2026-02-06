@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMqtt } from '../context/MqttContext';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff, ImageMinus } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff, ImageMinus, Loader2 } from 'lucide-react';
 
 const DeviceDetails = () => {
     const { uid } = useParams();
@@ -49,6 +50,38 @@ const DeviceDetails = () => {
     const [showMpToken, setShowMpToken] = useState(false);
     const [logs, setLogs] = useState([]);
     const [files, setFiles] = useState([]);
+    const [uploading, setUploading] = useState(false);
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/jpeg')) {
+            alert('Solo se permiten archivos JPG.');
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const storageRef = ref(storage, `ads/${normalizedUid}/${Date.now()}_${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            console.log('File uploaded to:', downloadURL);
+
+            // Send command to device to download
+            publish(`qrsolo/${normalizedUid}/cmnd/download_ad`, downloadURL);
+
+            alert('Imagen subida. El dispositivo comenzará la descarga pronto.');
+        } catch (error) {
+            console.error('Upload failed:', error);
+            alert('Error al subir la imagen: ' + error.message);
+        } finally {
+            setUploading(false);
+            // Reset input
+            e.target.value = null;
+        }
+    };
     const [availableWifi, setAvailableWifi] = useState([]);
     const [isScanning, setIsScanning] = useState(false);
 
@@ -618,6 +651,29 @@ const DeviceDetails = () => {
                                                 <span className="text-xs font-bold text-red-400 uppercase tracking-tight">Bloquear durante QR</span>
                                             </div>
                                             <Switch checked={config.adsBlockDuringQr} onChange={() => handleChange('adsBlockDuringQr', !config.adsBlockDuringQr)} />
+                                        </div>
+
+                                        {/* File Upload UI */}
+                                        <div className="pt-2">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-xs font-bold text-gray-400 uppercase tracking-tight">Subir Publicidad (JPG)</label>
+                                                {uploading && <Loader2 size={16} className="text-blue-400 animate-spin" />}
+                                            </div>
+                                            <label className={`flex flex-col items-center justify-center w-full h-24 border-2 border-dashed rounded-xl cursor-pointer hover:bg-white/5 transition group ${uploading ? 'border-gray-700 pointer-events-none opacity-50' : 'border-gray-700 hover:border-blue-500/50'}`}>
+                                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                    <Upload className={`mb-2 ${uploading ? 'text-gray-600' : 'text-gray-400 group-hover:text-blue-400'}`} size={24} />
+                                                    <p className="text-xs text-gray-500 group-hover:text-gray-300">
+                                                        {uploading ? 'Subiendo...' : 'Click para subir imagen'}
+                                                    </p>
+                                                </div>
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept="image/jpeg"
+                                                    onChange={handleFileUpload}
+                                                    disabled={uploading}
+                                                />
+                                            </label>
                                         </div>
                                     </div>
                                 )}

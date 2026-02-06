@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Craft rules based on data in your Firestore database
+// allow write: if firestore.get(
+//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow read/write to "ads" folder for authenticated users
+    match /ads/{userId}/{allPaths=**} {
+      allow read: if true; // Public read so ESP32 can download
+      allow write: if request.auth != null; // Only auth users can upload
+    }
+    
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
