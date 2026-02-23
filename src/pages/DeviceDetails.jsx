@@ -133,6 +133,9 @@ const DeviceDetails = () => {
                     amount: log.amount,
                     duration: log.duration,
                     ref: log.ref,
+                    payerName: log.payerName || '',
+                    payerEmail: log.payerEmail || '',
+                    payerPhone: log.payerPhone || '',
                     isCloud: true
                 }));
 
@@ -230,7 +233,7 @@ const DeviceDetails = () => {
                 // Format: LOG_NEW:amount,duration,ref
                 try {
                     const content = statusMsg.replace('LOG_NEW:', '').trim();
-                    const [amount, duration, ref] = content.split(',');
+                    const [amount, duration, ref, name, email, phone] = content.split(',');
                     const now = Date.now();
                     const newLog = {
                         time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -238,6 +241,9 @@ const DeviceDetails = () => {
                         amount: parseFloat(amount),
                         duration: parseInt(duration),
                         ref: ref,
+                        payerName: name || '',
+                        payerEmail: email || '',
+                        payerPhone: phone || '',
                         isCloud: false,
                         id: `local_${now}` // Temporary ID
                     };
@@ -621,15 +627,20 @@ const DeviceDetails = () => {
                     <div className="space-y-6">
                         <Section title="HISTORIAL" headerAction={<div className="bg-green-500/10 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-500/20 font-bold font-mono">SD OK</div>}>
                             <div className="bg-[#1a202a] rounded-xl overflow-hidden text-sm border border-gray-800/50">
-                                <div className="grid grid-cols-3 p-3 bg-[#1f2630] text-gray-500 text-[10px] font-black uppercase tracking-widest">
+                                <div className="grid grid-cols-4 p-3 bg-[#1f2630] text-gray-500 text-[10px] font-black uppercase tracking-widest">
                                     <div>Evento</div>
+                                    <div>Cliente</div>
                                     <div>Detalle</div>
                                     <div className="text-right">Hora</div>
                                 </div>
                                 <div className="divide-y divide-gray-800 max-h-[300px] overflow-y-auto custom-scrollbar">
                                     {logs.length > 0 ? logs.map((log, i) => (
-                                        <div key={i} className="grid grid-cols-3 p-3 hover:bg-white/5 transition border-l-2 border-transparent hover:border-blue-500">
+                                        <div key={i} className="grid grid-cols-4 p-3 hover:bg-white/5 transition border-l-2 border-transparent hover:border-blue-500">
                                             <span className="text-gray-300 text-xs truncate">{log.ref}</span>
+                                            <div className="flex flex-col truncate pr-2">
+                                                <span className="text-gray-200 text-[11px] font-medium truncate">{log.payerName || 'Público'}</span>
+                                                {log.payerEmail && <span className="text-gray-500 text-[9px] truncate">{log.payerEmail}</span>}
+                                            </div>
                                             <span className={log.amount > 0 ? "text-blue-400 font-bold" : "text-gray-400"}>
                                                 {log.amount > 0 ? `$${log.amount.toFixed(2)}` : '-'}
                                             </span>

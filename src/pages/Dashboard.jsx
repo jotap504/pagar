@@ -3,7 +3,7 @@ import { useMqtt } from '../context/MqttContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, orderBy, limit, doc, onSnapshot, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore';
-import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X, Trash2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X, Trash2, AlertTriangle, Users, Mail, Phone, ShoppingBag, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ClaimDevice from '../components/ClaimDevice';
 
@@ -15,6 +15,8 @@ const Dashboard = () => {
     const [firestoreStatuses, setFirestoreStatuses] = useState({});
     const [showClaimModal, setShowClaimModal] = useState(false);
     const [unlinkingId, setUnlinkingId] = useState(null);
+    const [activeTab, setActiveTab] = useState('devices'); // 'devices', 'activity', 'customers'
+    const [customers, setCustomers] = useState([]);
 
     useEffect(() => {
         if (status === 'disconnected') {
@@ -162,6 +164,28 @@ const Dashboard = () => {
         return unsubscribe;
     }, [user]);
 
+    // 5. Fetch Global Customers
+    useEffect(() => {
+        if (!user) return;
+
+        console.log('[Dashboard] Listening for customers collection...');
+        const q = query(
+            collection(db, 'users', user.uid, 'customers'),
+            orderBy('lastPurchase', 'desc'),
+            limit(100)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const customerList = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setCustomers(customerList);
+        });
+
+        return unsubscribe;
+    }, [user]);
+
     const devicesList = claimedUids.map(uid => {
         const fsData = firestoreStatuses[uid] || {};
         const mqttData = deviceStates[uid] || {};
@@ -224,70 +248,158 @@ const Dashboard = () => {
                     </div>
 
                     <div className="bg-[#1f2630] rounded-2xl p-5 border border-gray-800 shadow-sm relative overflow-hidden group">
-                        <div className="absolute -right-4 -top-4 text-purple-500/10 group-hover:text-purple-500/20 transition-all"><History size={100} /></div>
-                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Actividad Reciente</p>
-                        <h2 className="text-3xl font-black text-white">{globalLogs.length}</h2>
-                        <span className="text-xs text-gray-500">registros totales</span>
+                        <div className="absolute -right-4 -top-4 text-purple-500/10 group-hover:text-purple-500/20 transition-all"><Users size={100} /></div>
+                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Base de Clientes</p>
+                        <h2 className="text-3xl font-black text-white">{customers.length}</h2>
+                        <span className="text-xs text-gray-500">registrados</span>
                     </div>
                 </div>
 
+                {/* Tabs Selector */}
+                <div className="flex border-b border-gray-800 gap-8">
+                    <button
+                        onClick={() => setActiveTab('devices')}
+                        className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'devices' ? 'text-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    >
+                        Equipos
+                        {activeTab === 'devices' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-t-full"></div>}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('activity')}
+                        className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'activity' ? 'text-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    >
+                        Historial Global
+                        {activeTab === 'activity' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-t-full"></div>}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('customers')}
+                        className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'customers' ? 'text-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+                    >
+                        Base de Clientes
+                        {activeTab === 'customers' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-t-full"></div>}
+                    </button>
+                </div>
+
                 {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left: Device List */}
-                    <div className="lg:col-span-2 space-y-4">
-                        <div className="flex justify-between items-center mb-2">
-                            <h3 className="font-black text-xs uppercase tracking-[0.2em] text-gray-500">Mis Dispositivos</h3>
-                            <button onClick={() => setShowClaimModal(true)} className="md:hidden text-blue-500 p-1"><Plus size={24} /></button>
-                        </div>
+                <div className="grid grid-cols-1 gap-8">
+                    {activeTab === 'devices' && (
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {devicesList.map(({ uid, data, isOnline }) => (
+                                    <DeviceListItem
+                                        key={uid}
+                                        uid={uid}
+                                        data={data}
+                                        isOnline={isOnline}
+                                        onUnlink={() => handleUnlink(uid)}
+                                    />
+                                ))}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {devicesList.map(({ uid, data, isOnline }) => (
-                                <DeviceListItem
-                                    key={uid}
-                                    uid={uid}
-                                    data={data}
-                                    isOnline={isOnline}
-                                    onUnlink={() => handleUnlink(uid)}
-                                />
-                            ))}
-
-                            {claimedUids.length === 0 && (
-                                <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-800 rounded-3xl group hover:border-blue-500/30 transition-all cursor-pointer" onClick={() => setShowClaimModal(true)}>
-                                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform">
-                                        <Plus size={32} />
-                                    </div>
-                                    <h4 className="text-white font-bold mb-1">No tienes equipos vinculados</h4>
-                                    <p className="text-xs text-gray-500 max-w-[250px] mx-auto">Vincular tu placa es muy fácil. Solo necesitas el ID y la contraseña de admin.</p>
-                                    <button className="mt-6 px-8 py-2.5 bg-blue-600 text-white rounded-full text-xs font-bold shadow-lg shadow-blue-500/20">Vincular Mi Primer Equipo</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Right: Global Activity Feed */}
-                    <div className="space-y-4">
-                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-gray-500">Actividad Global</h3>
-                        <div className="bg-[#1f2630] rounded-2xl border border-gray-800 overflow-hidden">
-                            <div className="max-h-[500px] overflow-y-auto custom-scrollbar divide-y divide-gray-800/50">
-                                {globalLogs.length > 0 ? globalLogs.map((log) => (
-                                    <div key={log.id} className="p-4 hover:bg-white/5 transition flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-bold text-gray-200 truncate">{log.ref || 'Venta'}</p>
-                                            <p className="text-[10px] text-gray-500 font-mono">ID: {log.deviceUid}</p>
+                                {claimedUids.length === 0 && (
+                                    <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-800 rounded-3xl group hover:border-blue-500/30 transition-all cursor-pointer" onClick={() => setShowClaimModal(true)}>
+                                        <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform">
+                                            <Plus size={32} />
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-xs font-black text-blue-400">${log.amount.toFixed(2)}</p>
-                                            <p className="text-[10px] text-gray-600 font-mono">
-                                                {log.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </p>
-                                        </div>
+                                        <h4 className="text-white font-bold mb-1">No tienes equipos vinculados</h4>
+                                        <p className="text-xs text-gray-500 max-w-[250px] mx-auto">Vincular tu placa es muy fácil. Solo necesitas el ID y la contraseña de admin.</p>
+                                        <button className="mt-6 px-8 py-2.5 bg-blue-600 text-white rounded-full text-xs font-bold shadow-lg shadow-blue-500/20">Vincular Mi Primer Equipo</button>
                                     </div>
-                                )) : (
-                                    <div className="p-10 text-center text-gray-600 italic text-xs">Sin actividad registrada</div>
                                 )}
                             </div>
                         </div>
-                    </div>
+                    )}
+
+                    {activeTab === 'activity' && (
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                            <div className="bg-[#1f2630] rounded-2xl border border-gray-800 overflow-hidden">
+                                <div className="grid grid-cols-4 p-4 bg-black/20 text-gray-500 text-[10px] font-black uppercase tracking-widest">
+                                    <div>Evento / Equipo</div>
+                                    <div>Cliente</div>
+                                    <div>Monto</div>
+                                    <div className="text-right">Fecha / Hora</div>
+                                </div>
+                                <div className="divide-y divide-gray-800/50">
+                                    {globalLogs.length > 0 ? globalLogs.map((log) => (
+                                        <div key={log.id} className="p-4 hover:bg-white/5 transition grid grid-cols-4 items-center gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-bold text-gray-200 truncate">{log.ref || 'Venta'}</p>
+                                                <p className="text-[10px] text-gray-500 font-mono">ID: {log.deviceUid}</p>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-medium text-gray-300 truncate">{log.payerName || 'Público'}</p>
+                                                {log.payerEmail && <p className="text-[9px] text-gray-500 truncate">{log.payerEmail}</p>}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-blue-400">${log.amount.toFixed(2)}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-200">
+                                                    {log.date.toLocaleDateString([], { day: '2-digit', month: '2-digit' })}
+                                                </p>
+                                                <p className="text-[10px] text-gray-600 font-mono">
+                                                    {log.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="p-20 text-center text-gray-600 italic text-sm">Sin actividad registrada</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'customers' && (
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {customers.length > 0 ? customers.map((customer) => (
+                                    <div key={customer.id} className="bg-[#1f2630] rounded-2xl p-5 border border-gray-800 hover:border-blue-500/30 transition-all group">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all">
+                                                <Users size={24} />
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Gasto Total</p>
+                                                <p className="text-lg font-black text-green-400">$ {(customer.totalSpent || 0).toFixed(2)}</p>
+                                            </div>
+                                        </div>
+
+                                        <h4 className="text-white font-bold text-base truncate mb-1">{customer.name}</h4>
+                                        <div className="space-y-2 mb-4">
+                                            <div className="flex items-center gap-2 text-gray-400">
+                                                <Mail size={14} className="flex-shrink-0" />
+                                                <span className="text-xs truncate">{customer.email || 'No disponible'}</span>
+                                            </div>
+                                            {customer.phone && (
+                                                <div className="flex items-center gap-2 text-gray-400">
+                                                    <Phone size={14} className="flex-shrink-0" />
+                                                    <span className="text-xs">{customer.phone}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-4 border-t border-gray-800 flex justify-between items-center">
+                                            <div className="flex items-center gap-1.5">
+                                                <ShoppingBag size={12} className="text-blue-400" />
+                                                <span className="text-[10px] font-bold text-gray-400">{customer.purchaseCount || 1} Compras</span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-600">
+                                                Ulp. {customer.lastPurchase?.toDate().toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="col-span-full py-20 text-center border-2 border-dashed border-gray-800 rounded-3xl">
+                                        <div className="w-16 h-16 bg-gray-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-600">
+                                            <Users size={32} />
+                                        </div>
+                                        <h4 className="text-white font-bold mb-1">No hay clientes registrados</h4>
+                                        <p className="text-xs text-gray-500">Los datos de los clientes aparecerán aquí automáticamente tras cada pago aprobado.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
