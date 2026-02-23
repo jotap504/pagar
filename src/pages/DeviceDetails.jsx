@@ -113,17 +113,23 @@ const DeviceDetails = () => {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const allLogs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                date: doc.data().timestamp ? doc.data().timestamp.toDate() : new Date()
-            }));
+            const allLogs = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    date: data.timestamp ? data.timestamp.toDate() : new Date(),
+                    data: () => data // Keep data() available for internal use if needed or handle it here
+                };
+            });
 
             // Filter by device in memory
             const filteredLogs = allLogs
                 .filter(log => log.deviceUid === normalizedUid)
                 .map(log => ({
+                    id: log.id,
                     time: log.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    timestampMs: log.data().timestamp ? log.data().timestamp.toMillis() : Date.now(),
                     amount: log.amount,
                     duration: log.duration,
                     ref: log.ref,
@@ -133,10 +139,21 @@ const DeviceDetails = () => {
             console.log(`[DeviceDetails] Firestore Sync: Received ${filteredLogs.length} logs for ${normalizedUid}`);
             setLogs(prev => {
                 // If we have local MQTT logs, we want to keep them until they appear in Firestore
-                // This is a simple merge logic
-                const fsIds = new Set(allLogs.map(l => l.id));
-                const localOnly = prev.filter(l => !l.isCloud && !fsIds.has(l.id));
-                return [...localOnly, ...filteredLogs];
+                // We verify by matching amount, duration and ref within a 2-minute window
+                const localOnly = prev.filter(localLog => {
+                    if (localLog.isCloud) return false;
+
+                    const hasMatch = filteredLogs.some(cloudLog =>
+                        cloudLog.amount === localLog.amount &&
+                        cloudLog.duration === localLog.duration &&
+                        cloudLog.ref === localLog.ref &&
+                        Math.abs(cloudLog.timestampMs - (localLog.timestampMs || 0)) < 120000 // 2 min window
+                    );
+                    return !hasMatch;
+                });
+
+                // Merge and sort by timestamp
+                return [...localOnly, ...filteredLogs].sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0));
             });
         }, (err) => {
             console.error('[DeviceDetails] History listener error:', err);
@@ -214,13 +231,15 @@ const DeviceDetails = () => {
                 try {
                     const content = statusMsg.replace('LOG_NEW:', '').trim();
                     const [amount, duration, ref] = content.split(',');
+                    const now = Date.now();
                     const newLog = {
-                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                        time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                        timestampMs: now,
                         amount: parseFloat(amount),
                         duration: parseInt(duration),
                         ref: ref,
                         isCloud: false,
-                        id: `local_${Date.now()}` // Temporary ID
+                        id: `local_${now}` // Temporary ID
                     };
                     console.log('[DeviceDetails] MQTT LOG RECEIVED:', newLog);
                     setLogs(prev => [newLog, ...prev]);
