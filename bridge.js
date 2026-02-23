@@ -142,6 +142,88 @@ client.on('message', async (topic, message) => {
                 lastActive: admin.firestore.FieldValue.serverTimestamp()
             });
         }
+        else if (statusMsg.startsWith('LOGS:')) {
+            const parts = topic.split('/');
+            const uid = parts[1];
+            log(`[Bridge] Received historical logs sync request from ${uid}`);
+
+            // Find who owns this device
+            const deviceDoc = await db.collection('devices').doc(uid).get();
+            let ownerId = deviceDoc.exists ? deviceDoc.data().ownerId : null;
+            if (!ownerId) {
+                log(`[Bridge] Offline Sync aborted: Device ${uid} has no owner.`);
+                return;
+            }
+
+            const csvContent = statusMsg.replace('LOGS:', '').trim();
+            if (!csvContent) {
+                log(`[Bridge] Offline Sync: No logs to process for ${uid}`);
+                return;
+            }
+
+            const lines = csvContent.split('\n').filter(l => l.trim() !== '');
+            log(`[Bridge] Offline Sync: Processing ${lines.length} historical records for ${uid}...`);
+
+            // Fetch recent history to prevent duplicates
+            // We fetch the last 100 to compare
+            const historyRef = db.collection('users').doc(ownerId).collection('history');
+            const recentLogsSnap = await historyRef
+                .where('deviceUid', '==', uid)
+                .orderBy('timestamp', 'desc')
+                .limit(100)
+                .get();
+
+            const existingLogs = recentLogsSnap.docs.map(doc => {
+                const data = doc.data();
+                return `${data.amount}_${data.duration}_${data.ref}`;
+            });
+
+            const uniqueExistingSet = new Set(existingLogs);
+            let insertedCount = 0;
+            let batch = db.batch();
+            let batchCount = 0;
+
+            for (const line of lines) {
+                const [amtStr, durStr, ref] = line.split(',');
+                const amount = parseFloat(amtStr) || 0;
+                const duration = parseInt(durStr) || 0;
+                const cleanRef = (ref || 'Venta').trim();
+
+                const fingerprint = `${amount}_${duration}_${cleanRef}`;
+
+                if (!uniqueExistingSet.has(fingerprint)) {
+                    // It's a new log
+                    const newLogRef = historyRef.doc();
+                    batch.set(newLogRef, {
+                        deviceUid: uid,
+                        amount: amount,
+                        duration: duration,
+                        ref: cleanRef,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        isHistoricalSync: true,
+                        raw: `LOG_NEW:${line.trim()}`
+                    });
+
+                    // Add to our set so we don't duplicate within this same CSV payload
+                    uniqueExistingSet.add(fingerprint);
+                    insertedCount++;
+                    batchCount++;
+
+                    // Firestore limit is 500 per batch
+                    if (batchCount === 450) {
+                        await batch.commit();
+                        batch = db.batch();
+                        batchCount = 0;
+                    }
+                }
+            }
+
+            if (batchCount > 0) {
+                await batch.commit();
+            }
+
+            log(`[Bridge] Offline Sync Complete for ${uid}: Inserted ${insertedCount} missing logs.`);
+        }
         else if (statusMsg === 'online' || statusMsg === 'offline') {
             const parts = topic.split('/');
             const uid = parts[1];

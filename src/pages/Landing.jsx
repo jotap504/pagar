@@ -148,10 +148,10 @@ const Landing = () => {
                         <div className="relative flex flex-col gap-8">
                             <div className="w-full">
                                 {/* Ideally use relevant images here, keeping placeholders from the template until user provides app-specific ones */}
-                                <img src="/landing_assets/qr1.png" alt="Máquina de café vending lifestyle" className="rounded-4xl shadow-2xl w-full h-[300px] object-cover border-4 border-white object-top" />
+                                <img src="/landing_assets/qr1.png" alt="Máquina de café vending lifestyle" className="rounded-4xl shadow-2xl w-full h-[300px] object-contain bg-white border-4 border-white object-center" />
                             </div>
                             <div className="w-full">
-                                <img src="/landing_assets/qr2.png" alt="Arcade cabinet lifestyle" className="rounded-4xl shadow-2xl w-full h-[300px] object-cover border-4 border-white object-top" />
+                                <img src="/landing_assets/qr2.png" alt="Arcade cabinet lifestyle" className="rounded-4xl shadow-2xl w-full h-[300px] object-contain bg-white border-4 border-white object-center" />
                             </div>
                             <div className="absolute -z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4/5 h-4/5 bg-green-50 blur-[100px] rounded-full"></div>
                         </div>
