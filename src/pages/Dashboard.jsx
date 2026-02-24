@@ -237,41 +237,41 @@ const Dashboard = () => {
 
                 if (mpResponse.ok) {
                     const mpData = await mpResponse.json();
-                    const payer = mpData.payer;
-                    if (payer) {
-                        console.log(`[Dashboard] Raw MP Payer Data for ${toResolve.paymentId}:`, payer);
+                    console.log(`[Dashboard] Full MP Data for ${toResolve.paymentId}:`, mpData);
 
-                        const firstName = payer.first_name || '';
-                        const lastName = payer.last_name || '';
-                        const payerName = (firstName + ' ' + lastName).trim() || payer.nickname || 'Cliente';
-                        const payerEmail = payer.email || '';
-                        let payerPhone = '';
-                        if (payer.phone && payer.phone.number) {
-                            payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
-                        }
+                    const payer = mpData.payer || {};
+                    const addInfoPayer = (mpData.additional_info && mpData.additional_info.payer) || {};
 
-                        console.log(`[Dashboard] Payer resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
+                    const firstName = payer.first_name || addInfoPayer.first_name || '';
+                    const lastName = payer.last_name || addInfoPayer.last_name || '';
+                    const payerName = (firstName + ' ' + lastName).trim() || payer.nickname || addInfoPayer.nickname || 'Cliente';
+                    const payerEmail = payer.email || addInfoPayer.email || '';
 
-                        // Update log in history
-                        const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
-                        await updateDoc(logRef, { payerName, payerEmail, payerPhone });
+                    let payerPhone = '';
+                    const phoneObj = payer.phone || addInfoPayer.phone || {};
+                    if (phoneObj.number) {
+                        payerPhone = (phoneObj.area_code ? phoneObj.area_code + ' ' : '') + phoneObj.number;
+                    }
 
-                        // Update Customer Database
-                        // Use email, phone, or name as ID
-                        const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
-                        if (customerId) {
-                            console.log(`[Dashboard] Updating customer record for: ${customerId}`);
-                            const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
-                            await setDoc(customerRef, {
-                                name: payerName,
-                                email: payerEmail,
-                                phone: payerPhone,
-                                lastPaymentId: toResolve.paymentId,
-                                lastPurchase: new Date()
-                            }, { merge: true });
-                        }
-                    } else {
-                        console.warn(`[Dashboard] MP resolution succeeded but no payer data found for ID: ${toResolve.paymentId}`);
+                    console.log(`[Dashboard] Deep Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
+
+                    // Update log in history
+                    const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
+                    await updateDoc(logRef, { payerName, payerEmail, payerPhone });
+
+                    // Update Customer Database
+                    // Use email, phone, or name as ID
+                    const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
+                    if (customerId) {
+                        console.log(`[Dashboard] Updating customer record for: ${customerId}`);
+                        const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
+                        await setDoc(customerRef, {
+                            name: payerName,
+                            email: payerEmail,
+                            phone: payerPhone,
+                            lastPaymentId: toResolve.paymentId,
+                            lastPurchase: new Date()
+                        }, { merge: true });
                     }
                 } else {
                     const errorText = await mpResponse.text();
