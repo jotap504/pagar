@@ -84,6 +84,7 @@ client.on('error', (err) => {
 client.on('message', async (topic, message) => {
     try {
         const statusMsg = message.toString();
+        log(`[Bridge RAW] Topic: ${topic} | Message: ${statusMsg}`);
 
         if (statusMsg.startsWith('LOG_NEW:')) {
             const parts = topic.split('/');
@@ -129,19 +130,14 @@ client.on('message', async (topic, message) => {
                 amount: parseFloat(logData[0]) || 0,
                 duration: parseInt(logData[1]) || 0,
                 ref: logData[2] || 'Venta',
+                paymentId: logData[3] || '', // Save paymentId for client-side resolution
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 raw: statusMsg
             };
 
-            // Add Payer Info if present
-            if (logData.length >= 6) {
-                entry.payerName = logData[3] || '';
-                entry.payerEmail = logData[4] || '';
-                entry.payerPhone = logData[5] || '';
-            }
-
-            await db.collection('users').doc(ownerId).collection('history').add(entry);
-            log(`[Bridge] Log synced for User: ${ownerId} ${entry.payerEmail ? `(Payer: ${entry.payerEmail})` : ''}`);
+            const logId = `${uid}_${entry.ref}`;
+            await db.collection('users').doc(ownerId).collection('history').doc(logId).set(entry, { merge: true });
+            log(`[Bridge] Log synced. ID: ${logId} (PaymentID: ${entry.paymentId})`);
 
             // Update Customer Database
             if (entry.payerEmail || entry.payerPhone) {

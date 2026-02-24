@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useMqtt } from '../context/MqttContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, orderBy, limit, doc, onSnapshot, updateDoc, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, doc, onSnapshot, updateDoc, setDoc, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X, Trash2, AlertTriangle, Users, Mail, Phone, ShoppingBag, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ClaimDevice from '../components/ClaimDevice';
+import { decryptToken } from '../utils/encryption';
 
 const Dashboard = () => {
     const { connect, status, subscribe, messages } = useMqtt();
@@ -185,6 +186,81 @@ const Dashboard = () => {
 
         return unsubscribe;
     }, [user]);
+
+    // 6. Auto-Resolve Payer Information (Secure Client-Side)
+    const resolvingRefs = useRef(new Set());
+    useEffect(() => {
+        if (!user || globalLogs.length === 0) return;
+
+        const resolveNext = async () => {
+            const toResolve = globalLogs.find(l =>
+                l.paymentId &&
+                l.paymentId !== '---' &&
+                !l.payerName &&
+                !resolvingRefs.current.has(l.id)
+            );
+
+            if (!toResolve) return;
+
+            // Get token for specific device
+            const deviceData = firestoreStatuses[toResolve.deviceUid];
+            let token = deviceData?.mpToken;
+
+            if (token?.startsWith('enc:') && user?.uid) {
+                token = await decryptToken(token, user.uid);
+            }
+
+            if (!token) {
+                resolvingRefs.current.add(toResolve.id);
+                return;
+            }
+
+            resolvingRefs.current.add(toResolve.id);
+            console.log(`[Dashboard] Securely resolving payer for ${toResolve.deviceUid}...`);
+
+            try {
+                const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (mpResponse.ok) {
+                    const mpData = await mpResponse.json();
+                    const payer = mpData.payer;
+                    if (payer) {
+                        const payerName = payer.nickname || `${payer.first_name || ''} ${payer.last_name || ''}`.trim() || 'Cliente';
+                        const payerEmail = payer.email || '';
+                        let payerPhone = '';
+                        if (payer.phone && payer.phone.number) {
+                            payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
+                        }
+
+                        console.log(`[Dashboard] Payer resolved: ${payerName}`);
+
+                        // Update log in history
+                        const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
+                        await updateDoc(logRef, { payerName, payerEmail, payerPhone });
+
+                        // Update Customer Database
+                        const customerId = payerEmail || payerPhone;
+                        if (customerId) {
+                            const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
+                            await setDoc(customerRef, {
+                                name: payerName,
+                                email: payerEmail,
+                                phone: payerPhone,
+                                lastPurchase: new Date()
+                            }, { merge: true });
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('[Dashboard] Payer resolution failed:', error);
+            }
+        };
+
+        const timer = setTimeout(resolveNext, 1200); // Slight delay for performance
+        return () => clearTimeout(timer);
+    }, [globalLogs, firestoreStatuses, user]);
 
     const devicesList = claimedUids.map(uid => {
         const fsData = firestoreStatuses[uid] || {};

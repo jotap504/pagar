@@ -6,6 +6,7 @@ import { db, storage } from '../firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff, ImageMinus, Loader2 } from 'lucide-react';
+import { encryptToken, decryptToken } from '../utils/encryption';
 
 const DeviceDetails = () => {
     const { uid } = useParams();
@@ -136,6 +137,7 @@ const DeviceDetails = () => {
                     payerName: log.payerName || '',
                     payerEmail: log.payerEmail || '',
                     payerPhone: log.payerPhone || '',
+                    paymentId: log.paymentId || '',
                     isCloud: true
                 }));
 
@@ -164,6 +166,32 @@ const DeviceDetails = () => {
 
         return unsubscribe;
     }, [user, normalizedUid]);
+
+    // 3. Listen for Device Metadata (Name, MP Token) in Firestore
+    useEffect(() => {
+        if (!normalizedUid) return;
+
+        console.log(`[DeviceDetails] Listening for metadata for: ${normalizedUid}`);
+        const unsubscribe = onSnapshot(doc(db, 'devices', normalizedUid), async (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+
+                // Decrypt token if present
+                let decryptedToken = data.mpToken || '';
+                if (decryptedToken.startsWith('enc:') && user?.uid) {
+                    decryptedToken = await decryptToken(decryptedToken, user.uid);
+                }
+
+                setConfig(prev => ({
+                    ...prev,
+                    devName: data.name || prev.devName,
+                    mpToken: decryptedToken
+                }));
+            }
+        });
+
+        return unsubscribe;
+    }, [normalizedUid]);
 
     // Handle settings and status messages
     const settingsTopic = `qrsolo/${normalizedUid}/stat/settings`;
@@ -233,7 +261,7 @@ const DeviceDetails = () => {
                 // Format: LOG_NEW:amount,duration,ref
                 try {
                     const content = statusMsg.replace('LOG_NEW:', '').trim();
-                    const [amount, duration, ref, name, email, phone] = content.split(',');
+                    const [amount, duration, ref, paymentId] = content.split(',');
                     const now = Date.now();
                     const newLog = {
                         time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -241,9 +269,10 @@ const DeviceDetails = () => {
                         amount: parseFloat(amount),
                         duration: parseInt(duration),
                         ref: ref,
-                        payerName: name || '',
-                        payerEmail: email || '',
-                        payerPhone: phone || '',
+                        paymentId: paymentId || '',
+                        payerName: '',
+                        payerEmail: '',
+                        payerPhone: '',
                         isCloud: false,
                         id: `local_${now}` // Temporary ID
                     };
@@ -273,6 +302,71 @@ const DeviceDetails = () => {
             setLastUpdated(new Date());
         }
     }, [settingsMsg]);
+
+    // 4. Auto-Resolve Payer Information (Client-Side for Security)
+    const resolvingRefs = useRef(new Set());
+    useEffect(() => {
+        if (!config.mpToken || logs.length === 0 || !user || !normalizedUid) return;
+
+        const resolveNext = async () => {
+            // Find logs that have a paymentId but no name/email and aren't being resolved
+            const toResolve = logs.find(l =>
+                l.isCloud &&
+                l.paymentId &&
+                l.paymentId !== '---' &&
+                !l.payerName &&
+                !l.payerEmail &&
+                !resolvingRefs.current.has(l.id)
+            );
+
+            if (!toResolve) return;
+
+            resolvingRefs.current.add(toResolve.id);
+            console.log(`[DeviceDetails] Securely resolving payer for Payment ID: ${toResolve.paymentId}...`);
+
+            try {
+                const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`, {
+                    headers: { 'Authorization': `Bearer ${config.mpToken}` }
+                });
+
+                if (mpResponse.ok) {
+                    const mpData = await mpResponse.json();
+                    const payer = mpData.payer;
+                    if (payer) {
+                        const payerName = payer.nickname || `${payer.first_name || ''} ${payer.last_name || ''}`.trim() || 'Cliente';
+                        const payerEmail = payer.email || '';
+                        let payerPhone = '';
+                        if (payer.phone && payer.phone.number) {
+                            payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
+                        }
+
+                        console.log(`[DeviceDetails] Payer resolved: ${payerName} (${payerEmail})`);
+
+                        // Update the specific log in history
+                        const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
+                        await setDoc(logRef, { payerName, payerEmail, payerPhone }, { merge: true });
+
+                        // Update Customer Database
+                        const customerId = payerEmail || payerPhone;
+                        if (customerId) {
+                            const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
+                            await setDoc(customerRef, {
+                                name: payerName,
+                                email: payerEmail,
+                                phone: payerPhone,
+                                lastPurchase: new Date()
+                            }, { merge: true });
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('[DeviceDetails] Payer resolution failed:', error);
+            }
+        };
+
+        const timer = setTimeout(resolveNext, 1000); // Debounce to allow multiple logs to sync
+        return () => clearTimeout(timer);
+    }, [logs, config.mpToken, user, normalizedUid]);
 
     const handleChange = (name, value) => {
         setConfig(prev => ({ ...prev, [name]: value }));
@@ -315,16 +409,19 @@ const DeviceDetails = () => {
 
     const handleSaveSection = async (sectionName, fields) => {
         // 1. Handle Cloud-Only fields (Device Name)
-        if (fields.includes('devName')) {
+        if (fields.includes('devName') || fields.includes('mpToken')) {
             try {
-                console.log(`[DeviceDetails] Saving alias "${config.devName}" to Firestore...`);
-                await setDoc(doc(db, 'devices', normalizedUid), {
-                    name: config.devName
-                }, { merge: true });
+                const updateData = {};
+                if (fields.includes('devName')) updateData.name = config.devName;
+                if (fields.includes('mpToken') && user?.uid) {
+                    updateData.mpToken = await encryptToken(config.mpToken, user.uid);
+                }
+
+                console.log(`[DeviceDetails] Saving ${Object.keys(updateData).join(', ')} to Firestore...`);
+                await setDoc(doc(db, 'devices', normalizedUid), updateData, { merge: true });
             } catch (e) {
-                console.error("Error saving device name to cloud:", e);
-                alert("Error al guardar el nombre en la nube");
-                // Don't return, try to save other fields
+                console.error("Error saving to cloud:", e);
+                alert("Error al guardar datos en la nube");
             }
         }
 
