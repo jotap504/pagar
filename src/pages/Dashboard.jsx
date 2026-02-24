@@ -242,18 +242,42 @@ const Dashboard = () => {
                     const payer = mpData.payer || {};
                     const addInfoPayer = (mpData.additional_info && mpData.additional_info.payer) || {};
 
-                    const firstName = payer.first_name || addInfoPayer.first_name || '';
-                    const lastName = payer.last_name || addInfoPayer.last_name || '';
-                    const payerName = (firstName + ' ' + lastName).trim() || payer.nickname || addInfoPayer.nickname || 'Cliente';
-                    const payerEmail = payer.email || addInfoPayer.email || '';
-
+                    let firstName = payer.first_name || addInfoPayer.first_name || '';
+                    let lastName = payer.last_name || addInfoPayer.last_name || '';
+                    let payerName = (firstName + ' ' + lastName).trim() || payer.nickname || addInfoPayer.nickname || '';
+                    let payerEmail = payer.email || addInfoPayer.email || '';
                     let payerPhone = '';
                     const phoneObj = payer.phone || addInfoPayer.phone || {};
                     if (phoneObj.number) {
                         payerPhone = (phoneObj.area_code ? phoneObj.area_code + ' ' : '') + phoneObj.number;
                     }
 
-                    console.log(`[Dashboard] Deep Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
+                    // SUPER FALLBACK: Try Merchant Order if name is still empty
+                    if (!payerName && mpData.order && mpData.order.id && mpData.order.type === 'mercadopago') {
+                        console.log(`[Dashboard] Sparse data, trying Merchant Order fallback for ID: ${mpData.order.id}...`);
+                        try {
+                            const moResponse = await fetch(`https://api.mercadopago.com/merchant_orders/${mpData.order.id}`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (moResponse.ok) {
+                                const moData = await moResponse.json();
+                                console.log('[Dashboard] Merchant Order Data:', moData);
+                                if (moData.payer) {
+                                    firstName = moData.payer.first_name || firstName;
+                                    lastName = moData.payer.last_name || lastName;
+                                    payerName = (firstName + ' ' + lastName).trim() || moData.payer.nickname || payerName;
+                                    payerEmail = moData.payer.email || payerEmail;
+                                }
+                            }
+                        } catch (moErr) {
+                            console.warn('[Dashboard] Merchant Order fallback failed:', moErr);
+                        }
+                    }
+
+                    // Final fallback to generic
+                    payerName = payerName || 'Cliente';
+
+                    console.log(`[Dashboard] Final Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
 
                     // Update log in history
                     const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
