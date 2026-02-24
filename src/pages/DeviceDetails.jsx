@@ -322,6 +322,10 @@ const DeviceDetails = () => {
             if (!toResolve) return;
 
             resolvingRefs.current.add(toResolve.id);
+
+            // Local UI Feedback
+            setLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Resolving...' } : l));
+
             console.log(`[DeviceDetails] Securely resolving payer for Payment ID: ${toResolve.paymentId}...`);
 
             try {
@@ -365,12 +369,18 @@ const DeviceDetails = () => {
                     }
                 } else {
                     const errorText = await mpResponse.text();
-                    console.error(`[DeviceDetails] MP API Error (${mpResponse.status}):`, errorText);
-                    // Remove from resolvingRefs to allow retry later
+                    const statusText = `Error MP ${mpResponse.status}`;
+                    console.error(`[DeviceDetails] ${statusText}:`, errorText);
+
+                    // Update UI with error
+                    setLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: statusText } : l));
+
+                    // Remove from resolvingRefs to allow retry
                     resolvingRefs.current.delete(toResolve.id);
                 }
             } catch (error) {
                 console.error('[DeviceDetails] Payer resolution failed:', error);
+                setLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Error Red' } : l));
                 // Remove from resolvingRefs to allow retry later
                 resolvingRefs.current.delete(toResolve.id);
             }

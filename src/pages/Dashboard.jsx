@@ -210,9 +210,16 @@ const Dashboard = () => {
                 token = await decryptToken(token, user.uid);
             }
 
-            if (!token) return; // Don't block, try again when firestoreStatuses updates
+            if (!token) {
+                console.warn(`[Dashboard] No token found for device ${toResolve.deviceUid}`);
+                return;
+            }
 
             resolvingRefs.current.add(toResolve.id);
+
+            // Local UI Feedback
+            setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Resolviendo...' } : l));
+
             console.log(`[Dashboard] Securely resolving payer for ${toResolve.deviceUid}...`);
 
             try {
@@ -256,12 +263,18 @@ const Dashboard = () => {
                     }
                 } else {
                     const errorText = await mpResponse.text();
-                    console.error(`[Dashboard] MP API Error (${mpResponse.status}):`, errorText);
-                    // Remove from resolvingRefs to allow retry later
+                    const statusText = `Error MP ${mpResponse.status}`;
+                    console.error(`[Dashboard] ${statusText}:`, errorText);
+
+                    // Update UI with error
+                    setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: statusText } : l));
+
+                    // Remove from resolvingRefs to allow retry later if they refresh
                     resolvingRefs.current.delete(toResolve.id);
                 }
             } catch (error) {
                 console.error('[Dashboard] Payer resolution failed:', error);
+                setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Error de Red' } : l));
                 // Remove from resolvingRefs to allow retry later
                 resolvingRefs.current.delete(toResolve.id);
             }
