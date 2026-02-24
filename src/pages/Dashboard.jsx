@@ -249,6 +249,9 @@ const Dashboard = () => {
                         payerPhone = (phoneObj.area_code ? phoneObj.area_code + ' ' : '') + phoneObj.number;
                     }
 
+                    let payerId = payer.id || (mpData.merchant_order_id ? mpData.merchant_order_id : '') || '';
+
+                    // SUPER FALLBACK: Try Merchant Order if name is still empty
                     if (!payerName && mpData.order && mpData.order.id && mpData.order.type === 'mercadopago') {
                         console.log(`[Dashboard] Sparse data, trying Merchant Order fallback for ID: ${mpData.order.id}...`);
                         try {
@@ -258,11 +261,22 @@ const Dashboard = () => {
                             if (moResponse.ok) {
                                 const moData = await moResponse.json();
                                 console.log('[Dashboard] Merchant Order Data:', moData);
-                                if (moData.payer) {
-                                    firstName = moData.payer.first_name || firstName;
-                                    lastName = moData.payer.last_name || lastName;
-                                    payerName = (firstName + ' ' + lastName).trim() || moData.payer.nickname || payerName;
-                                    payerEmail = moData.payer.email || payerEmail;
+
+                                const moPayer = moData.payer || {};
+                                firstName = moPayer.first_name || firstName;
+                                lastName = moPayer.last_name || lastName;
+                                payerName = (firstName + ' ' + lastName).trim() || moPayer.nickname || payerName;
+                                payerEmail = moPayer.email || payerEmail;
+                                payerId = moPayer.id || payerId;
+
+                                // If still no name, check the payments array within the merchant order
+                                if (!payerName && moData.payments && moData.payments.length > 0) {
+                                    const firstPay = moData.payments[0];
+                                    const payPayer = firstPay.payer || {};
+                                    firstName = payPayer.first_name || firstName;
+                                    lastName = payPayer.last_name || lastName;
+                                    payerName = (firstName + ' ' + lastName).trim() || payPayer.nickname || payerName;
+                                    payerEmail = payPayer.email || payerEmail;
                                 }
                             }
                         } catch (moErr) {
@@ -270,10 +284,10 @@ const Dashboard = () => {
                         }
                     }
 
-                    // Final fallback to generic
-                    payerName = payerName || 'Cliente';
+                    // Final fallback to Payer ID if possible, then generic
+                    payerName = payerName || (payerId ? `Cliente #${payerId}` : 'Cliente');
 
-                    console.log(`[Dashboard] Final Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
+                    console.log(`[Dashboard] Final Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}", ID="${payerId}"`);
 
                     // Update log in history
                     const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
