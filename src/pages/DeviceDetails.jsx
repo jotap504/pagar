@@ -361,6 +361,8 @@ const DeviceDetails = () => {
                 }
             } catch (error) {
                 console.error('[DeviceDetails] Payer resolution failed:', error);
+                // Remove from resolvingRefs to allow retry later
+                resolvingRefs.current.delete(toResolve.id);
             }
         };
 

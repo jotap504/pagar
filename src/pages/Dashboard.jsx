@@ -210,10 +210,7 @@ const Dashboard = () => {
                 token = await decryptToken(token, user.uid);
             }
 
-            if (!token) {
-                resolvingRefs.current.add(toResolve.id);
-                return;
-            }
+            if (!token) return; // Don't block, try again when firestoreStatuses updates
 
             resolvingRefs.current.add(toResolve.id);
             console.log(`[Dashboard] Securely resolving payer for ${toResolve.deviceUid}...`);
@@ -255,6 +252,8 @@ const Dashboard = () => {
                 }
             } catch (error) {
                 console.error('[Dashboard] Payer resolution failed:', error);
+                // Remove from resolvingRefs to allow retry later
+                resolvingRefs.current.delete(toResolve.id);
             }
         };
 
