@@ -239,7 +239,11 @@ const Dashboard = () => {
                     const mpData = await mpResponse.json();
                     const payer = mpData.payer;
                     if (payer) {
-                        const payerName = payer.nickname || `${payer.first_name || ''} ${payer.last_name || ''}`.trim() || 'Cliente';
+                        console.log(`[Dashboard] Raw MP Payer Data for ${toResolve.paymentId}:`, payer);
+
+                        const firstName = payer.first_name || '';
+                        const lastName = payer.last_name || '';
+                        const payerName = (firstName + ' ' + lastName).trim() || payer.nickname || 'Cliente';
                         const payerEmail = payer.email || '';
                         let payerPhone = '';
                         if (payer.phone && payer.phone.number) {
