@@ -202,8 +202,10 @@ const Dashboard = () => {
 
             if (!toResolve) return;
 
-            // Get token for specific device
-            const deviceData = firestoreStatuses[toResolve.deviceUid];
+            // Case-insensitive token lookup
+            const deviceUidUpper = toResolve.deviceUid?.toUpperCase();
+            const deviceId = Object.keys(firestoreStatuses).find(id => id.toUpperCase() === deviceUidUpper);
+            const deviceData = deviceId ? firestoreStatuses[deviceId] : null;
             let token = deviceData?.mpToken;
 
             if (token?.startsWith('enc:') && user?.uid) {
@@ -212,6 +214,9 @@ const Dashboard = () => {
 
             if (!token) {
                 console.warn(`[Dashboard] No token found for device ${toResolve.deviceUid}`);
+                // Temporary UI Feedback if token is missing
+                setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Sin Token MP' } : l));
+                resolvingRefs.current.add(toResolve.id);
                 return;
             }
 
