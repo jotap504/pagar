@@ -328,9 +328,8 @@ const DeviceDetails = () => {
             console.log(`[DeviceDetails] Securely resolving payer for Payment ID: ${toResolve.paymentId}...`);
 
             try {
-                const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`, {
-                    headers: { 'Authorization': `Bearer ${config.mpToken}` }
-                });
+                const targetUrl = `https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`;
+                const mpResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(targetUrl)}&token=${config.mpToken}`);
 
                 if (mpResponse.ok) {
                     const mpData = await mpResponse.json();
@@ -353,9 +352,8 @@ const DeviceDetails = () => {
                     if (!payerName && mpData.order && mpData.order.id && mpData.order.type === 'mercadopago') {
                         console.log(`[DeviceDetails] Sparse data, trying Merchant Order fallback for ID: ${mpData.order.id}...`);
                         try {
-                            const moResponse = await fetch(`https://api.mercadopago.com/merchant_orders/${mpData.order.id}`, {
-                                headers: { 'Authorization': `Bearer ${config.mpToken}` }
-                            });
+                            const moUrl = `https://api.mercadopago.com/merchant_orders/${mpData.order.id}`;
+                            const moResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(moUrl)}&token=${config.mpToken}`);
                             if (moResponse.ok) {
                                 const moData = await moResponse.json();
                                 console.log('[DeviceDetails] Merchant Order Data:', moData);

@@ -228,12 +228,9 @@ const Dashboard = () => {
             // Local UI Feedback
             setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Resolviendo...' } : l));
 
-            console.log(`[Dashboard] Securely resolving payer for ${toResolve.deviceUid}...`);
-
             try {
-                const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const targetUrl = `https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`;
+                const mpResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(targetUrl)}&token=${token}`);
 
                 if (mpResponse.ok) {
                     const mpData = await mpResponse.json();
@@ -252,13 +249,12 @@ const Dashboard = () => {
                         payerPhone = (phoneObj.area_code ? phoneObj.area_code + ' ' : '') + phoneObj.number;
                     }
 
-                    // SUPER FALLBACK: Try Merchant Order if name is still empty
                     if (!payerName && mpData.order && mpData.order.id && mpData.order.type === 'mercadopago') {
                         console.log(`[Dashboard] Sparse data, trying Merchant Order fallback for ID: ${mpData.order.id}...`);
                         try {
-                            const moResponse = await fetch(`https://api.mercadopago.com/merchant_orders/${mpData.order.id}`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
+                            const moUrl = `https://api.mercadopago.com/merchant_orders/${mpData.order.id}`;
+                            const moResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(moUrl)}&token=${token}`);
+
                             if (moResponse.ok) {
                                 const moData = await moResponse.json();
                                 console.log('[Dashboard] Merchant Order Data:', moData);
