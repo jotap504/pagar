@@ -196,7 +196,7 @@ const Dashboard = () => {
             const toResolve = globalLogs.find(l =>
                 l.paymentId &&
                 l.paymentId !== '---' &&
-                !l.payerName &&
+                (!l.payerName || l.payerName === 'Cliente' || l.payerName === 'Público' || l.payerName === 'Sin Token MP') &&
                 !resolvingRefs.current.has(l.id)
             );
 

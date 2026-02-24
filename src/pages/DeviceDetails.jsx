@@ -314,8 +314,7 @@ const DeviceDetails = () => {
                 l.isCloud &&
                 l.paymentId &&
                 l.paymentId !== '---' &&
-                !l.payerName &&
-                !l.payerEmail &&
+                (!l.payerName || l.payerName === 'Cliente' || l.payerName === 'Público' || l.payerName === 'Sin Token MP') &&
                 !resolvingRefs.current.has(l.id)
             );
 
