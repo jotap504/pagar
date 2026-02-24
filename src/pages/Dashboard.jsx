@@ -204,16 +204,19 @@ const Dashboard = () => {
 
             // Case-insensitive token lookup
             const deviceUidUpper = toResolve.deviceUid?.toUpperCase();
-            const deviceId = Object.keys(firestoreStatuses).find(id => id.toUpperCase() === deviceUidUpper);
+            const availableDeviceIds = Object.keys(firestoreStatuses);
+            const deviceId = availableDeviceIds.find(id => id.toUpperCase() === deviceUidUpper);
             const deviceData = deviceId ? firestoreStatuses[deviceId] : null;
             let token = deviceData?.mpToken;
+
+            console.log(`[Dashboard] Lookup for ${toResolve.deviceUid} (${deviceUidUpper}): Found=${!!deviceId}, Token=${!!token}, AvailableCount=${availableDeviceIds.length}`);
 
             if (token?.startsWith('enc:') && user?.uid) {
                 token = await decryptToken(token, user.uid);
             }
 
             if (!token) {
-                console.warn(`[Dashboard] No token found for device ${toResolve.deviceUid}`);
+                console.warn(`[Dashboard] No token found for device ${toResolve.deviceUid}. Available devices:`, availableDeviceIds);
                 // Temporary UI Feedback if token is missing
                 setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Sin Token MP' } : l));
                 resolvingRefs.current.add(toResolve.id);
