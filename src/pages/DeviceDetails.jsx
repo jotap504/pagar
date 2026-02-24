@@ -340,24 +340,34 @@ const DeviceDetails = () => {
                             payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
                         }
 
-                        console.log(`[DeviceDetails] Payer resolved: ${payerName} (${payerEmail})`);
+                        console.log(`[DeviceDetails] Payer resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
 
                         // Update the specific log in history
                         const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
                         await setDoc(logRef, { payerName, payerEmail, payerPhone }, { merge: true });
 
                         // Update Customer Database
-                        const customerId = payerEmail || payerPhone;
+                        // Use email, phone, or name as ID
+                        const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
                         if (customerId) {
+                            console.log(`[DeviceDetails] Updating customer record for: ${customerId}`);
                             const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
                             await setDoc(customerRef, {
                                 name: payerName,
                                 email: payerEmail,
                                 phone: payerPhone,
+                                lastPaymentId: toResolve.paymentId,
                                 lastPurchase: new Date()
                             }, { merge: true });
                         }
+                    } else {
+                        console.warn(`[DeviceDetails] MP resolution succeeded but no payer data found for ID: ${toResolve.paymentId}`);
                     }
+                } else {
+                    const errorText = await mpResponse.text();
+                    console.error(`[DeviceDetails] MP API Error (${mpResponse.status}):`, errorText);
+                    // Remove from resolvingRefs to allow retry later
+                    resolvingRefs.current.delete(toResolve.id);
                 }
             } catch (error) {
                 console.error('[DeviceDetails] Payer resolution failed:', error);

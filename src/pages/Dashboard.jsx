@@ -231,24 +231,34 @@ const Dashboard = () => {
                             payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
                         }
 
-                        console.log(`[Dashboard] Payer resolved: ${payerName}`);
+                        console.log(`[Dashboard] Payer resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
 
                         // Update log in history
                         const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
                         await updateDoc(logRef, { payerName, payerEmail, payerPhone });
 
                         // Update Customer Database
-                        const customerId = payerEmail || payerPhone;
+                        // Use email, phone, or name as ID
+                        const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
                         if (customerId) {
+                            console.log(`[Dashboard] Updating customer record for: ${customerId}`);
                             const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
                             await setDoc(customerRef, {
                                 name: payerName,
                                 email: payerEmail,
                                 phone: payerPhone,
+                                lastPaymentId: toResolve.paymentId,
                                 lastPurchase: new Date()
                             }, { merge: true });
                         }
+                    } else {
+                        console.warn(`[Dashboard] MP resolution succeeded but no payer data found for ID: ${toResolve.paymentId}`);
                     }
+                } else {
+                    const errorText = await mpResponse.text();
+                    console.error(`[Dashboard] MP API Error (${mpResponse.status}):`, errorText);
+                    // Remove from resolvingRefs to allow retry later
+                    resolvingRefs.current.delete(toResolve.id);
                 }
             } catch (error) {
                 console.error('[Dashboard] Payer resolution failed:', error);
