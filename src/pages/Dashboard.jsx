@@ -15,8 +15,7 @@ const Dashboard = () => {
     const [firestoreStatuses, setFirestoreStatuses] = useState({});
     const [showClaimModal, setShowClaimModal] = useState(false);
     const [unlinkingId, setUnlinkingId] = useState(null);
-    const [activeTab, setActiveTab] = useState('devices'); // 'devices', 'activity', 'customers'
-    const [customers, setCustomers] = useState([]);
+    const [activeTab, setActiveTab] = useState('devices'); // 'devices', 'activity'
 
     useEffect(() => {
         if (status === 'disconnected') {
@@ -164,27 +163,6 @@ const Dashboard = () => {
         return unsubscribe;
     }, [user]);
 
-    // 5. Fetch Global Customers
-    useEffect(() => {
-        if (!user) return;
-
-        console.log('[Dashboard] Listening for customers collection...');
-        const q = query(
-            collection(db, 'users', user.uid, 'customers'),
-            orderBy('lastPurchase', 'desc'),
-            limit(100)
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const customerList = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setCustomers(customerList);
-        });
-
-        return unsubscribe;
-    }, [user]);
 
     // 6. Auto-Resolve Payer Information (Secure Client-Side)
     const resolvingRefs = useRef(new Set());
@@ -243,19 +221,6 @@ const Dashboard = () => {
                     // Update log in history
                     const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
                     await updateDoc(logRef, { payerName, payerEmail, payerPhone });
-
-                    // Update Customer Database
-                    const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
-                    if (customerId) {
-                        const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
-                        await setDoc(customerRef, {
-                            name: payerName,
-                            email: payerEmail,
-                            phone: payerPhone,
-                            lastPaymentId: toResolve.paymentId,
-                            lastPurchase: new Date()
-                        }, { merge: true });
-                    }
                 } else {
                     console.error('[Dashboard] MP API Error:', mpResponse.status);
                     resolvingRefs.current.delete(toResolve.id); // Allow retry
@@ -331,12 +296,6 @@ const Dashboard = () => {
                         <h2 className="text-3xl font-black text-white">$ {stats.todayRevenue.toFixed(2)}</h2>
                     </div>
 
-                    <div className="bg-[#1f2630] rounded-2xl p-5 border border-gray-800 shadow-sm relative overflow-hidden group">
-                        <div className="absolute -right-4 -top-4 text-purple-500/10 group-hover:text-purple-500/20 transition-all"><Users size={100} /></div>
-                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-1">Base de Clientes</p>
-                        <h2 className="text-3xl font-black text-white">{customers.length}</h2>
-                        <span className="text-xs text-gray-500">registrados</span>
-                    </div>
                 </div>
 
                 {/* Tabs Selector */}
@@ -354,13 +313,6 @@ const Dashboard = () => {
                     >
                         Historial Global
                         {activeTab === 'activity' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-t-full"></div>}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('customers')}
-                        className={`pb-4 text-sm font-bold transition-all relative ${activeTab === 'customers' ? 'text-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        Base de Clientes
-                        {activeTab === 'customers' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-t-full"></div>}
                     </button>
                 </div>
 
@@ -433,57 +385,6 @@ const Dashboard = () => {
                         </div>
                     )}
 
-                    {activeTab === 'customers' && (
-                        <div className="space-y-4 animate-in fade-in duration-300">
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                {customers.length > 0 ? customers.map((customer) => (
-                                    <div key={customer.id} className="bg-[#1f2630] rounded-2xl p-5 border border-gray-800 hover:border-blue-500/30 transition-all group">
-                                        <div className="flex items-start justify-between mb-4">
-                                            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all">
-                                                <Users size={24} />
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Gasto Total</p>
-                                                <p className="text-lg font-black text-green-400">$ {(customer.totalSpent || 0).toFixed(2)}</p>
-                                            </div>
-                                        </div>
-
-                                        <h4 className="text-white font-bold text-base truncate mb-1">{customer.name}</h4>
-                                        <div className="space-y-2 mb-4">
-                                            <div className="flex items-center gap-2 text-gray-400">
-                                                <Mail size={14} className="flex-shrink-0" />
-                                                <span className="text-xs truncate">{customer.email || 'No disponible'}</span>
-                                            </div>
-                                            {customer.phone && (
-                                                <div className="flex items-center gap-2 text-gray-400">
-                                                    <Phone size={14} className="flex-shrink-0" />
-                                                    <span className="text-xs">{customer.phone}</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="pt-4 border-t border-gray-800 flex justify-between items-center">
-                                            <div className="flex items-center gap-1.5">
-                                                <ShoppingBag size={12} className="text-blue-400" />
-                                                <span className="text-[10px] font-bold text-gray-400">{customer.purchaseCount || 1} Compras</span>
-                                            </div>
-                                            <span className="text-[10px] text-gray-600">
-                                                Ulp. {customer.lastPurchase?.toDate().toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )) : (
-                                    <div className="col-span-full py-20 text-center border-2 border-dashed border-gray-800 rounded-3xl">
-                                        <div className="w-16 h-16 bg-gray-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-600">
-                                            <Users size={32} />
-                                        </div>
-                                        <h4 className="text-white font-bold mb-1">No hay clientes registrados</h4>
-                                        <p className="text-xs text-gray-500">Los datos de los clientes aparecerán aquí automáticamente tras cada pago aprobado.</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 
