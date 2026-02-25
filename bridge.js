@@ -139,23 +139,6 @@ client.on('message', async (topic, message) => {
             await db.collection('users').doc(ownerId).collection('history').doc(logId).set(entry, { merge: true });
             log(`[Bridge] Log synced. ID: ${logId} (PaymentID: ${entry.paymentId})`);
 
-            // Update Customer Database
-            if (entry.payerEmail || entry.payerPhone) {
-                const customerId = entry.payerEmail || entry.payerPhone;
-                const customerRef = db.collection('users').doc(ownerId).collection('customers').doc(customerId);
-
-                await customerRef.set({
-                    name: entry.payerName || 'Cliente',
-                    email: entry.payerEmail || '',
-                    phone: entry.payerPhone || '',
-                    lastPurchase: admin.firestore.FieldValue.serverTimestamp(),
-                    totalSpent: admin.firestore.FieldValue.increment(entry.amount),
-                    purchaseCount: admin.firestore.FieldValue.increment(1)
-                }, { merge: true });
-
-                log(`[Bridge] Customer database updated for: ${customerId}`);
-            }
-
             // Also update device status as online since we just got a log
             await db.collection('devices').doc(uid).update({
                 status: 'online',
