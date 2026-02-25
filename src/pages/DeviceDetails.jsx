@@ -6,7 +6,6 @@ import { db, storage } from '../firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Save, ChevronLeft, Volume2, Wifi, Upload, RefreshCw, Smartphone, Clock, Terminal, FileText, Lock, Image as ImageIcon, Plus, QrCode, Eye, EyeOff, ImageMinus, Loader2 } from 'lucide-react';
-import { encryptToken, decryptToken } from '../utils/encryption';
 
 const DeviceDetails = () => {
     const { uid } = useParams();
@@ -321,70 +320,41 @@ const DeviceDetails = () => {
             if (!toResolve) return;
 
             resolvingRefs.current.add(toResolve.id);
+            const token = config.mpToken;
 
-            // Local UI Feedback
-            setLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Resolving...' } : l));
-
-            console.log(`[DeviceDetails] Securely resolving payer for Payment ID: ${toResolve.paymentId}...`);
+            if (!token) {
+                console.warn(`[DeviceDetails] No token found.`);
+                resolvingRefs.current.add(toResolve.id);
+                return;
+            }
 
             try {
-                const targetUrl = `https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`;
-                const mpResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(targetUrl)}&token=${config.mpToken}`);
+                // Direct fetch (reverting to legacy behavior)
+                const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
 
                 if (mpResponse.ok) {
                     const mpData = await mpResponse.json();
-                    console.log(`[DeviceDetails] Full MP Data for ${toResolve.paymentId}:`, mpData);
-
-                    let payer = mpData.payer || {};
-                    let addInfoPayer = (mpData.additional_info && mpData.additional_info.payer) || {};
-
-                    let firstName = payer.first_name || addInfoPayer.first_name || '';
-                    let lastName = payer.last_name || addInfoPayer.last_name || '';
-                    let payerName = (firstName + ' ' + lastName).trim() || payer.nickname || addInfoPayer.nickname || '';
-                    let payerEmail = payer.email || addInfoPayer.email || '';
+                    const payer = mpData.payer || {};
+                    const firstName = payer.first_name || '';
+                    const lastName = payer.last_name || '';
+                    const payerName = (firstName + ' ' + lastName).trim() || payer.nickname || 'Cliente';
+                    const payerEmail = payer.email || '';
                     let payerPhone = '';
-                    const phoneObj = payer.phone || addInfoPayer.phone || {};
-                    if (phoneObj.number) {
-                        payerPhone = (phoneObj.area_code ? phoneObj.area_code + ' ' : '') + phoneObj.number;
+                    if (payer.phone && payer.phone.number) {
+                        payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
                     }
 
-                    // SUPER FALLBACK: Try Merchant Order if name is still empty
-                    if (!payerName && mpData.order && mpData.order.id && mpData.order.type === 'mercadopago') {
-                        console.log(`[DeviceDetails] Sparse data, trying Merchant Order fallback for ID: ${mpData.order.id}...`);
-                        try {
-                            const moUrl = `https://api.mercadopago.com/merchant_orders/${mpData.order.id}`;
-                            const moResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(moUrl)}&token=${config.mpToken}`);
-                            if (moResponse.ok) {
-                                const moData = await moResponse.json();
-                                console.log('[DeviceDetails] Merchant Order Data:', moData);
-                                if (moData.payer) {
-                                    firstName = moData.payer.first_name || firstName;
-                                    lastName = moData.payer.last_name || lastName;
-                                    payerName = (firstName + ' ' + lastName).trim() || moData.payer.nickname || payerName;
-                                    payerEmail = moData.payer.email || payerEmail;
-                                }
-                            }
-                        } catch (moErr) {
-                            console.warn('[DeviceDetails] Merchant Order fallback failed:', moErr);
-                        }
-                    }
+                    console.log(`[DeviceDetails] Resolved: Name="${payerName}", Email="${payerEmail}"`);
 
-                    // Final fallback to generic
-                    payerName = payerName || 'Cliente';
-
-                    console.log(`[DeviceDetails] Final Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
-
-                    console.log(`[DeviceDetails] Payer resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}"`);
-
-                    // Update the specific log in history
+                    // Update history
                     const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
                     await setDoc(logRef, { payerName, payerEmail, payerPhone }, { merge: true });
 
                     // Update Customer Database
-                    // Use email, phone, or name as ID
                     const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
                     if (customerId) {
-                        console.log(`[DeviceDetails] Updating customer record for: ${customerId}`);
                         const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
                         await setDoc(customerRef, {
                             name: payerName,
@@ -395,21 +365,12 @@ const DeviceDetails = () => {
                         }, { merge: true });
                     }
                 } else {
-                    const errorText = await mpResponse.text();
-                    const statusText = `Error MP ${mpResponse.status}`;
-                    console.error(`[DeviceDetails] ${statusText}:`, errorText);
-
-                    // Update UI with error
-                    setLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: statusText } : l));
-
-                    // Remove from resolvingRefs to allow retry
-                    resolvingRefs.current.delete(toResolve.id);
+                    console.error('[DeviceDetails] MP API Error:', mpResponse.status);
+                    resolvingRefs.current.delete(toResolve.id); // Allow retry
                 }
             } catch (error) {
                 console.error('[DeviceDetails] Payer resolution failed:', error);
-                setLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Error Red' } : l));
-                // Remove from resolvingRefs to allow retry later
-                resolvingRefs.current.delete(toResolve.id);
+                resolvingRefs.current.delete(toResolve.id); // Allow retry
             }
         };
 
@@ -462,8 +423,8 @@ const DeviceDetails = () => {
             try {
                 const updateData = {};
                 if (fields.includes('devName')) updateData.name = config.devName;
-                if (fields.includes('mpToken') && user?.uid) {
-                    updateData.mpToken = await encryptToken(config.mpToken, user.uid);
+                if (fields.includes('mpToken')) {
+                    updateData.mpToken = config.mpToken;
                 }
 
                 console.log(`[DeviceDetails] Saving ${Object.keys(updateData).join(', ')} to Firestore...`);

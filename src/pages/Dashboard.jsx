@@ -6,7 +6,6 @@ import { collection, query, where, orderBy, limit, doc, onSnapshot, updateDoc, s
 import { RefreshCw, Search, Power, Zap, Wifi, WifiOff, LayoutGrid, BarChart2, History, Settings, Plus, X, Trash2, AlertTriangle, Users, Mail, Phone, ShoppingBag, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ClaimDevice from '../components/ClaimDevice';
-import { decryptToken } from '../utils/encryption';
 
 const Dashboard = () => {
     const { connect, status, subscribe, messages } = useMqtt();
@@ -211,93 +210,43 @@ const Dashboard = () => {
 
             console.log(`[Dashboard] Lookup for ${toResolve.deviceUid} (${deviceUidUpper}): Found=${!!deviceId}, Token=${!!token}, AvailableCount=${availableDeviceIds.length}`);
 
-            if (token?.startsWith('enc:') && user?.uid) {
-                token = await decryptToken(token, user.uid);
-            }
-
             if (!token) {
-                console.warn(`[Dashboard] No token found for device ${toResolve.deviceUid}. Available devices:`, availableDeviceIds);
-                // Temporary UI Feedback if token is missing
-                setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Sin Token MP' } : l));
+                console.warn(`[Dashboard] No token found for device ${toResolve.deviceUid}.`);
                 resolvingRefs.current.add(toResolve.id);
                 return;
             }
 
             resolvingRefs.current.add(toResolve.id);
 
-            // Local UI Feedback
-            setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Resolviendo...' } : l));
-
             try {
-                const targetUrl = `https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`;
-                const mpResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(targetUrl)}&token=${token}`);
+                // Direct fetch (reverting to legacy behavior)
+                const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${toResolve.paymentId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
 
                 if (mpResponse.ok) {
                     const mpData = await mpResponse.json();
-                    console.log(`[Dashboard] Full MP Data for ${toResolve.paymentId}:`, mpData);
-
                     const payer = mpData.payer || {};
-                    const addInfoPayer = (mpData.additional_info && mpData.additional_info.payer) || {};
-
-                    let firstName = payer.first_name || addInfoPayer.first_name || '';
-                    let lastName = payer.last_name || addInfoPayer.last_name || '';
-                    let payerName = (firstName + ' ' + lastName).trim() || payer.nickname || addInfoPayer.nickname || '';
-                    let payerEmail = payer.email || addInfoPayer.email || '';
+                    const firstName = payer.first_name || '';
+                    const lastName = payer.last_name || '';
+                    const payerName = (firstName + ' ' + lastName).trim() || payer.nickname || 'Cliente';
+                    const payerEmail = payer.email || '';
                     let payerPhone = '';
-                    const phoneObj = payer.phone || addInfoPayer.phone || {};
-                    if (phoneObj.number) {
-                        payerPhone = (phoneObj.area_code ? phoneObj.area_code + ' ' : '') + phoneObj.number;
+                    if (payer.phone && payer.phone.number) {
+                        payerPhone = (payer.phone.area_code ? payer.phone.area_code + ' ' : '') + payer.phone.number;
                     }
 
-                    let payerId = payer.id || (mpData.merchant_order_id ? mpData.merchant_order_id : '') || '';
-
-                    // SUPER FALLBACK: Try Merchant Order if name is still empty
-                    if (!payerName && mpData.order && mpData.order.id && mpData.order.type === 'mercadopago') {
-                        console.log(`[Dashboard] Sparse data, trying Merchant Order fallback for ID: ${mpData.order.id}...`);
-                        try {
-                            const moUrl = `https://api.mercadopago.com/merchant_orders/${mpData.order.id}`;
-                            const moResponse = await fetch(`/api/mp-proxy?url=${encodeURIComponent(moUrl)}&token=${token}`);
-
-                            if (moResponse.ok) {
-                                const moData = await moResponse.json();
-                                console.log('[Dashboard] Merchant Order Data:', moData);
-
-                                const moPayer = moData.payer || {};
-                                firstName = moPayer.first_name || firstName;
-                                lastName = moPayer.last_name || lastName;
-                                payerName = (firstName + ' ' + lastName).trim() || moPayer.nickname || payerName;
-                                payerEmail = moPayer.email || payerEmail;
-                                payerId = moPayer.id || payerId;
-
-                                // If still no name, check the payments array within the merchant order
-                                if (!payerName && moData.payments && moData.payments.length > 0) {
-                                    const firstPay = moData.payments[0];
-                                    const payPayer = firstPay.payer || {};
-                                    firstName = payPayer.first_name || firstName;
-                                    lastName = payPayer.last_name || lastName;
-                                    payerName = (firstName + ' ' + lastName).trim() || payPayer.nickname || payerName;
-                                    payerEmail = payPayer.email || payerEmail;
-                                }
-                            }
-                        } catch (moErr) {
-                            console.warn('[Dashboard] Merchant Order fallback failed:', moErr);
-                        }
-                    }
-
-                    // Final fallback to Payer ID if possible, then generic
-                    payerName = payerName || (payerId ? `Cliente #${payerId}` : 'Cliente');
-
-                    console.log(`[Dashboard] Final Resolved: Name="${payerName}", Email="${payerEmail}", Phone="${payerPhone}", ID="${payerId}"`);
+                    console.log(`[Dashboard] Resolved: Name="${payerName}", Email="${payerEmail}"`);
 
                     // Update log in history
                     const logRef = doc(db, 'users', user.uid, 'history', toResolve.id);
                     await updateDoc(logRef, { payerName, payerEmail, payerPhone });
 
                     // Update Customer Database
-                    // Use email, phone, or name as ID
                     const customerId = payerEmail || payerPhone || `anon_${toResolve.paymentId}`;
                     if (customerId) {
-                        console.log(`[Dashboard] Updating customer record for: ${customerId}`);
                         const customerRef = doc(db, 'users', user.uid, 'customers', customerId);
                         await setDoc(customerRef, {
                             name: payerName,
@@ -308,21 +257,12 @@ const Dashboard = () => {
                         }, { merge: true });
                     }
                 } else {
-                    const errorText = await mpResponse.text();
-                    const statusText = `Error MP ${mpResponse.status}`;
-                    console.error(`[Dashboard] ${statusText}:`, errorText);
-
-                    // Update UI with error
-                    setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: statusText } : l));
-
-                    // Remove from resolvingRefs to allow retry later if they refresh
-                    resolvingRefs.current.delete(toResolve.id);
+                    console.error('[Dashboard] MP API Error:', mpResponse.status);
+                    resolvingRefs.current.delete(toResolve.id); // Allow retry
                 }
             } catch (error) {
                 console.error('[Dashboard] Payer resolution failed:', error);
-                setGlobalLogs(prev => prev.map(l => l.id === toResolve.id ? { ...l, payerName: 'Error de Red' } : l));
-                // Remove from resolvingRefs to allow retry later
-                resolvingRefs.current.delete(toResolve.id);
+                resolvingRefs.current.delete(toResolve.id); // Allow retry
             }
         };
 
