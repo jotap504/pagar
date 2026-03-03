@@ -295,21 +295,36 @@ const Landing = () => {
                                     const chatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
                                     if (botToken && chatId) {
-                                        const text = `🔔 *¡Nuevo Lead en Pag.ar!*\n\n` +
-                                            `👤 *Nombre:* ${data.name}\n` +
-                                            `📱 *WhatsApp:* ${data.whatsapp}\n` +
-                                            `✉️ *Email:* ${data.email}\n` +
-                                            `💡 *Proyecto:* ${data.project}`;
+                                        try {
+                                            // Escape special characters for Markdown to avoid API errors
+                                            const escape = (text) => text.toString().replace(/[_*`]/g, '\\$&');
 
-                                        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                chat_id: chatId,
-                                                text: text,
-                                                parse_mode: 'Markdown'
-                                            })
-                                        });
+                                            const text = `🔔 *¡Nuevo Lead en Pag.ar!*\n\n` +
+                                                `👤 *Nombre:* ${escape(data.name)}\n` +
+                                                `📱 *WhatsApp:* ${escape(data.whatsapp)}\n` +
+                                                `✉️ *Email:* ${escape(data.email)}\n` +
+                                                `💡 *Proyecto:* ${escape(data.project)}`;
+
+                                            const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    chat_id: chatId,
+                                                    text: text,
+                                                    parse_mode: 'Markdown'
+                                                })
+                                            });
+
+                                            if (!tgRes.ok) {
+                                                const tgErr = await tgRes.json();
+                                                console.error("Telegram API Error:", tgErr);
+                                            }
+                                        } catch (tgEx) {
+                                            console.error("Failed to send Telegram notification:", tgEx);
+                                            // We don't block the UI success if only Telegram fails
+                                        }
+                                    } else {
+                                        console.warn("Telegram credentials missing in environment variables.");
                                     }
 
                                     setIsSubmitted(true);
