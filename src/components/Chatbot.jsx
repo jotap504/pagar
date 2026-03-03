@@ -1,72 +1,63 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Loader2, Bot } from 'lucide-react';
 
-const SYSTEM_PROMPT = `
-Eres el Asistente Tecnico Oficial de Pag.ar (dispositivo de cobro IoT con codigo QR en pantalla TFT).
-Tu objetivo es ayudar a clientes e instaladores a solucionar dudas y configurar el modulo.
-Responde de manera amable, directa, muy concisa y profesional. Usa emojis cuando sea adecuado.
+const SALES_PROMPT = `
+Eres el Asesor Comercial Senior de Pag.ar. Tu único objetivo es cerrar ventas y demostrar el valor del producto.
+Idioma: Español (Argentina/Latam). Estilo: Persuasiro, profesional, entusiasta.
 
-BASE DE CONOCIMIENTOS (PREGUNTAS FRECUENTES - FAQs):
+PUNTOS CLAVE DE VENTA:
+- Beneficio: Transforma cualquier máquina en un punto de cobro digital en minutos.
+- Versatilidad: 3 modos (Temporizador para tiempo, Pulso para servicios, Estático para cobros base).
+- Ingresos Extra: Pantalla de 3.5" para publicidad (sube tus banners y genera más dinero).
+- Instalación: "Plug & Play". Se alimenta por USB-C y se conecta como una tecla de luz. No necesitás ser técnico.
+- Garantía y Envíos: 1 año de garantía oficial. Envíos a todo el país (VíaCargo/Correo Argentino).
+- Escalamiento: Si el cliente pregunta por manejar muchos locales o comisiones divididas, menciona que tenemos el "Sistema de Franquicias v2.0" y que deje su contacto para una asesoría personalizada.
 
-1. ¿Como ingreso a la configuracion del modulo Pag.ar?
-- Respuesta: Enchufa la maquina a la corriente. Manten presionado el Boton de Configuracion (GPIO 0) durante 5 segundos continuos. La maquina creara una red WiFi temporal llamada "QR-Config". Conectate a ella desde tu celular y abre el navegador en la direccion http://192.168.4.1.
+REGLA DE ORO: NO menciones tecnicismos como números de pines (GPIO), protocolos I2C, o resistencias, a menos que el cliente sea muy insistente. Enfócate en la facilidad de uso y rentabilidad.
+`;
 
-2. ¿Donde consigo mi Access Token de Mercado Pago?
-- Respuesta: Debes ingresar a tu panel de desarrollador en Mercado Pago (https://www.mercadopago.com.ar/developers/panel). Ingresa a "Tus Integraciones" -> "Credenciales de Produccion" y copia el "Access Token" (suele empezar con APP_USR). Jamas lo compartas con nadie.
+const SUPPORT_PROMPT = `
+Eres el Asistente Tecnico Oficial de Pag.ar. Tu objetivo es la resolucion de problemas y guia de instalacion.
+Estilo: Preciso, servicial, experto.
 
-3. ¿Cuales son los pines de los Reles por defecto?
-- Respuesta: Para la ultima version, el Rele 1 usa el pin GPIO 17, y el Rele 2 usa el pin GPIO 18. Activan ambos por defecto al validar un pago.
-
-4. PROBLEMA: Al enchufar la maquina a la corriente, el rele hace un click falso o da corriente por un microsegundo. ¿Como lo soluciono?
-- Respuesta: Esto ocurre en modulos de reles muy sensibles al ruido electronico (como el HL-52S) durante el arranque del procesador ESP32-S3. Modificar el software no sirve porque es fisico. La SOLUCION OFICIAL ES:
-  A) Poner 2 resistencias de Pull-up de 10k ohms. Una punta al pin GPIO de control, y la otra punta directo al pin de 3.3V (ESTO SE DEBE HACER EN LA ENTRADA DIRECTA DEL MODULO DE RELAY IN1 E IN2).
-  B) Si el problema persiste, usa un modulo transitor NPN como el BC337 o TIP120 para aislar el GND del rele hasta que el programa mande senyal.
-  C) Si quieres la opcion 100% aislada, integra un modulo expansor I2C (PCF8574).
-
-5. ¿Se puede hacer cobro dividido (MercadoPago Marketplace o Split de Pagos) enviando un porcentaje al dueño de la maquina y otro al dueño del local?
-- Respuesta: Si, pero requiere la Arquitectura Pag.ar v2.0 basada en la nube. El software v1.0 que opera de modo estatico local no lo soporta. Contactanos para solicitar el desarrollo e instalacion de la version v2.0 (Sistema de Franquicias).
-
-6. PROBLEMA: La pantalla o el panel web muestra caracteres raros.
-- Respuesta: Eso fue solucionado en la ultima actualizacion del firmware mediante el saneamiento estricto a codificacion HTML/ASCII. Por favor contactanos para enviarte la actualizacion de software.
-
-7. ¿Realizan envios?
-- Respuesta: Sí, realizamos envíos a todo el país a través de VíaCargo o Correo Argentino, garantizando que el dispositivo llegue de forma segura a tu localidad.
-
-8. ¿Que modos de uso tiene el dispositivo?
-- Respuesta: El sistema es versátil y cuenta con tres modalidades:
-  - Modo QR Temporizador: Ideal para servicios por tiempo.
-  - Modo QR Pulso o Crédito: Para máquinas que requieren una señal de activación específica.
-  - Modo QR Estático: Para cobros simples.
-
-9. ¿Es personalizable el funcionamiento?
-- Respuesta: Sí, el sistema es altamente personalizable. A través del panel de administración, puedes ajustar valores como el precio por crédito/pulso, la duración del temporizador y otros parámetros operativos según tu necesidad.
-
-10. ¿Se puede mostrar publicidad en la pantalla?
-- Respuesta: ¡Exacto! El dispositivo permite cargar imágenes (en resolución 480x320px). Cuando el sistema no está en uso, proyecta automáticamente un carrusel publicitario para promocionar tus servicios o productos.
-
-11. ¿Que medida tiene la pantalla?
-- Respuesta: El modelo Starter cuenta con una pantalla de alta visibilidad de 3.5 pulgadas, optimizada para mostrar códigos QR y contenido publicitario de forma clara.
-
-12. ¿Es dificil la instalacion/conexion?
-- Respuesta: La instalación es sumamente sencilla. La alimentación se realiza mediante un cable USB-C estándar. Para el control del equipo, se utilizan los cables de salida del relé, los cuales funcionan como un interruptor (tecla de luz) que interrumpe o habilita la conexión del dispositivo que desees controlar.
-
-13. ¿Puedo controlar mas de un dispositivo a la vez?
-- Respuesta: Sí, el hardware está equipado con 2 relés de salida independientes, lo que te permite gestionar el accionamiento de dos conexiones o dispositivos diferentes desde una misma unidad.
-
-14. ¿Tiene garantia?
-- Respuesta: Sí, el producto cuenta con una garantía oficial de 1 año. Es fundamental seguir las instrucciones de uso y conexión detalladas en el Manual de Usuario para mantener la validez de la misma.
-
-IMPORTANTE PARA TI COMO IA: Responde estrictamente usando esta informacion. Si el usuario te pregunta cosas generales de programacion o fuera de estos temas, diles: "Como soporte tecnico de Pag.ar solo puedo ayudarte con dudas sobre nuestros dispositivos de cobro QR o su integracion electronica. ¿En que mas te ayudo?". No inventes respuestas fuera del manual.
+GUIA TECNICA (FAQs):
+- Configuracion: Mantener GPIO 0 por 5 seg -> WiFi "QR-Config" -> 192.168.4.1.
+- Pines: Relay 1 (GPIO 17), Relay 2 (GPIO 18).
+- Solucion Glitch/Micro-pulso: Pull-ups de 10k a 3.3V, Transistor BC337 o Modulo I2C PCF8574.
+- Mercado Pago: El token se obtiene en el panel de desarrolladores de MP. 
+- Medidas Publicidad: 480x320px. 
 `;
 
 const Chatbot = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState([
-        { role: 'assistant', content: '¡Hola! Soy el asistente técnico de Pag.ar 🤖. ¿En qué te puedo ayudar hoy?' }
-    ]);
+    const [mode, setMode] = useState(null); // 'sales' | 'support' | null
+    const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef(null);
+
+    // Initial greeting
+    useEffect(() => {
+        if (messages.length === 0) {
+            setMessages([
+                { role: 'assistant', content: '¡Hola! Bienvenido a Pag.ar 🤖. Para ayudarte mejor, ¿con quién te gustaría hablar?' }
+            ]);
+        }
+    }, []);
+
+    const selectMode = (m) => {
+        setMode(m);
+        const choiceText = m === 'sales' ? 'Hablar con un Asesor Comercial' : 'Hablar con Soporte Técnico';
+        const responseText = m === 'sales'
+            ? '¡Excelente! Soy tu asesor comercial. Estoy aquí para contarte cómo Pag.ar puede potenciar tu negocio. ¿Qué te gustaría saber?'
+            : 'Entendido. Soy el asistente técnico. Estoy listo para ayudarte con la instalación o configuración de tu equipo. ¿Qué problema o duda tienes?';
+
+        setMessages(prev => [
+            ...prev,
+            { role: 'user', content: choiceText },
+            { role: 'assistant', content: responseText }
+        ]);
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -98,8 +89,9 @@ const Chatbot = () => {
             }
 
             // Build payload for DeepSeek API (OpenAI compatible API)
+            const currentSystemPrompt = mode === 'sales' ? SALES_PROMPT : SUPPORT_PROMPT;
             const apiMessages = [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: currentSystemPrompt },
                 ...newMessages.map(m => ({ role: m.role, content: m.content }))
             ];
 
@@ -180,6 +172,26 @@ const Chatbot = () => {
                             </div>
                         ))}
 
+                        {/* Mode Selection Buttons */}
+                        {!mode && !isLoading && (
+                            <div className="flex flex-col gap-2 p-2 animate-in fade-in zoom-in duration-300">
+                                <button
+                                    onClick={() => selectMode('sales')}
+                                    className="bg-white border-2 border-primary text-teal-600 font-medium py-3 px-4 rounded-xl hover:bg-teal-50 transition-all text-sm shadow-sm flex items-center justify-between group"
+                                >
+                                    <span>Asesor Comercial</span>
+                                    <span className="material-symbols-outlined text-lg group-hover:translate-x-1 transition-transform">payments</span>
+                                </button>
+                                <button
+                                    onClick={() => selectMode('support')}
+                                    className="bg-white border-2 border-primary text-teal-600 font-medium py-3 px-4 rounded-xl hover:bg-teal-50 transition-all text-sm shadow-sm flex items-center justify-between group"
+                                >
+                                    <span>Soporte Técnico</span>
+                                    <span className="material-symbols-outlined text-lg group-hover:translate-x-1 transition-transform">build</span>
+                                </button>
+                            </div>
+                        )}
+
                         {isLoading && (
                             <div className="flex justify-start">
                                 <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-none px-4 py-3 text-slate-400 shadow-sm flex items-center gap-2">
@@ -198,18 +210,26 @@ const Chatbot = () => {
                                 type="text"
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder="Escribe tu duda aquí..."
+                                placeholder={mode ? "Escribe tu duda..." : "Selecciona una opción arriba"}
                                 className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-slate-700"
-                                disabled={isLoading}
+                                disabled={isLoading || !mode}
                             />
                             <button
                                 type="submit"
-                                disabled={!input.trim() || isLoading}
+                                disabled={!input.trim() || isLoading || !mode}
                                 className="bg-primary text-white p-2.5 rounded-full hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-teal-500 shadow-sm"
                             >
                                 <Send size={18} />
                             </button>
                         </form>
+                        {mode && (
+                            <button
+                                onClick={() => { setMode(null); setMessages([{ role: 'assistant', content: '¡Hola! ¿Con quién te gustaría hablar ahora?' }]); }}
+                                className="w-full text-[10px] text-slate-400 mt-2 hover:text-primary transition-colors uppercase tracking-widest font-bold"
+                            >
+                                ← Volver al menú principal
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
