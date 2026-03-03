@@ -19,7 +19,12 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
     
-    // 3. Bloquear todo lo demás por defecto
+    // 3. Consultas de Contacto: Cualquiera puede enviar una consulta (escritura), nadie puede leerlas por fuera.
+    match /contact_submissions/{submissionId} {
+      allow create: if true;
+    }
+
+    // 4. Bloquear todo lo demás por defecto
     match /{document=**} {
       allow read, write: if false;
     }

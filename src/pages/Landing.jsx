@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { db } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { CheckCircle, Loader2 } from 'lucide-react';
 
 const Landing = () => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSubmitted, setIsSubmitted] = useState(false);
+    const [error, setError] = useState(null);
     return (
         <div className="bg-bg-light font-sans selection:bg-green-100 min-h-screen">
             {/* HERO SECTION */}
@@ -252,44 +258,85 @@ const Landing = () => {
                         <h2 className="text-4xl md:text-6xl font-extrabold text-slate-900 mb-6">¿Listo para escalar tu negocio?</h2>
                         <p className="text-slate-500 text-lg max-w-2xl mx-auto">Deja de perder ventas por no tener cambio. Empieza a aceptar Mercado Pago hoy mismo.</p>
                     </div>
-                    <form
-                        className="bg-white border border-slate-100 p-8 md:p-16 rounded-[3rem] soft-shadow space-y-8"
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            const formData = new FormData(e.target);
-                            const name = formData.get('userName');
-                            const wa = formData.get('userWa');
-                            const email = formData.get('userEmail');
-                            const msg = formData.get('userMsg');
+                    {isSubmitted ? (
+                        <div className="bg-green-50 border border-green-100 p-12 text-center rounded-[3rem] shadow-sm animate-in zoom-in duration-500">
+                            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <CheckCircle size={40} />
+                            </div>
+                            <h3 className="text-3xl font-bold text-slate-900 mb-4">¡Mensaje Recibido!</h3>
+                            <p className="text-slate-500 text-lg">
+                                Gracias por contactarte con Pag.ar. Juan se comunicará contigo a la brevedad.
+                            </p>
+                        </div>
+                    ) : (
+                        <form
+                            className="bg-white border border-slate-100 p-8 md:p-16 rounded-[3rem] soft-shadow space-y-8"
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+                                setIsSubmitting(true);
+                                setError(null);
 
-                            const subject = encodeURIComponent(`Consulta desde Pag.ar: ${name}`);
-                            const body = encodeURIComponent(`Nombre: ${name}\nWhatsApp: ${wa}\nEmail: ${email}\n\nProyecto:\n${msg}`);
+                                const formData = new FormData(e.target);
+                                const data = {
+                                    name: formData.get('userName'),
+                                    whatsapp: formData.get('userWa'),
+                                    email: formData.get('userEmail'),
+                                    project: formData.get('userMsg'),
+                                    status: 'pending',
+                                    createdAt: serverTimestamp()
+                                };
 
-                            window.location.href = `mailto:pagottojuanpablo@gmail.com?subject=${subject}&body=${body}`;
-                        }}
-                    >
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-3">
-                                <label className="text-sm font-bold text-slate-700 ml-1">Tu Nombre</label>
-                                <input name="userName" type="text" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Ej: Juan Pérez" />
+                                try {
+                                    await addDoc(collection(db, "contact_submissions"), data);
+                                    setIsSubmitted(true);
+                                } catch (err) {
+                                    console.error("Error submitting form:", err);
+                                    setError("Hubo un error al enviar tu mensaje. Por favor intenta de nuevo.");
+                                } finally {
+                                    setIsSubmitting(false);
+                                }
+                            }}
+                        >
+                            {error && (
+                                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium">
+                                    {error}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-sm font-bold text-slate-700 ml-1">Tu Nombre</label>
+                                    <input name="userName" type="text" required disabled={isSubmitting} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Ej: Juan Pérez" />
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-sm font-bold text-slate-700 ml-1">WhatsApp</label>
+                                    <input name="userWa" type="tel" required disabled={isSubmitting} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="+54 9 11 ..." />
+                                </div>
                             </div>
                             <div className="space-y-3">
-                                <label className="text-sm font-bold text-slate-700 ml-1">WhatsApp</label>
-                                <input name="userWa" type="tel" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="+54 9 11 ..." />
+                                <label className="text-sm font-bold text-slate-700 ml-1">Correo Electrónico</label>
+                                <input name="userEmail" type="email" required disabled={isSubmitting} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="hola@ejemplo.com" />
                             </div>
-                        </div>
-                        <div className="space-y-3">
-                            <label className="text-sm font-bold text-slate-700 ml-1">Correo Electrónico</label>
-                            <input name="userEmail" type="email" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="hola@ejemplo.com" />
-                        </div>
-                        <div className="space-y-3">
-                            <label className="text-sm font-bold text-slate-700 ml-1">Cuéntanos sobre tu proyecto</label>
-                            <textarea name="userMsg" rows="4" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Arcade, Canchas, Vending..."></textarea>
-                        </div>
-                        <button type="submit" className="w-full bg-primary hover:bg-green-800 text-white font-bold py-5 rounded-2xl shadow-xl shadow-green-900/10 transition-all hover:scale-[1.01] active:scale-95 text-lg">
-                            Solicitar Asesoramiento Gratuito
-                        </button>
-                    </form>
+                            <div className="space-y-3">
+                                <label className="text-sm font-bold text-slate-700 ml-1">Cuéntanos sobre tu proyecto</label>
+                                <textarea name="userMsg" rows="4" required disabled={isSubmitting} className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Arcade, Canchas, Vending..."></textarea>
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="w-full bg-primary hover:bg-green-800 text-white font-bold py-5 rounded-2xl shadow-xl shadow-green-900/10 transition-all hover:scale-[1.01] active:scale-95 text-lg flex items-center justify-center gap-2"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={20} />
+                                        Enviando...
+                                    </>
+                                ) : (
+                                    'Solicitar Asesoramiento Gratuito'
+                                )}
+                            </button>
+                        </form>
+                    )}
                 </div>
             </section>
         </div>
