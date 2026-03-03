@@ -287,7 +287,31 @@ const Landing = () => {
                                 };
 
                                 try {
+                                    // 1. Save to Firestore
                                     await addDoc(collection(db, "contact_submissions"), data);
+
+                                    // 2. Send Telegram Notification
+                                    const botToken = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
+                                    const chatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
+
+                                    if (botToken && chatId) {
+                                        const text = `🔔 *¡Nuevo Lead en Pag.ar!*\n\n` +
+                                            `👤 *Nombre:* ${data.name}\n` +
+                                            `📱 *WhatsApp:* ${data.whatsapp}\n` +
+                                            `✉️ *Email:* ${data.email}\n` +
+                                            `💡 *Proyecto:* ${data.project}`;
+
+                                        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                chat_id: chatId,
+                                                text: text,
+                                                parse_mode: 'Markdown'
+                                            })
+                                        });
+                                    }
+
                                     setIsSubmitted(true);
                                 } catch (err) {
                                     console.error("Error submitting form:", err);
