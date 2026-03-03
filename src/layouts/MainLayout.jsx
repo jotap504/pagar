@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { ShoppingCart, LogIn } from 'lucide-react';
+import Chatbot from '../components/Chatbot';
 
 const MainLayout = () => {
     const location = useLocation();
@@ -48,6 +49,8 @@ const MainLayout = () => {
                     </div>
                 </div>
             </footer>
+
+            <Chatbot />
         </div>
     );
 };

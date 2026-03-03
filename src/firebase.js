@@ -20,3 +20,4 @@ export const db = getFirestore(app, "pagar-webonline");
 export const storage = getStorage(app);
 export default app;
 
+
