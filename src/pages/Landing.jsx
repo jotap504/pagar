@@ -15,7 +15,7 @@ const Landing = () => {
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-600 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-green-600"></span>
                                 </span>
-                                Revolución IoT en Pagos
+                                Revolución Electrónica en Pagos QR
                             </div>
 
                             <h1 className="text-5xl lg:text-7xl font-extrabold tracking-tight text-slate-900 leading-[1.1]">
@@ -252,24 +252,39 @@ const Landing = () => {
                         <h2 className="text-4xl md:text-6xl font-extrabold text-slate-900 mb-6">¿Listo para escalar tu negocio?</h2>
                         <p className="text-slate-500 text-lg max-w-2xl mx-auto">Deja de perder ventas por no tener cambio. Empieza a aceptar Mercado Pago hoy mismo.</p>
                     </div>
-                    <form className="bg-white border border-slate-100 p-8 md:p-16 rounded-[3rem] soft-shadow space-y-8">
+                    <form
+                        className="bg-white border border-slate-100 p-8 md:p-16 rounded-[3rem] soft-shadow space-y-8"
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.target);
+                            const name = formData.get('userName');
+                            const wa = formData.get('userWa');
+                            const email = formData.get('userEmail');
+                            const msg = formData.get('userMsg');
+
+                            const subject = encodeURIComponent(`Consulta desde Pag.ar: ${name}`);
+                            const body = encodeURIComponent(`Nombre: ${name}\nWhatsApp: ${wa}\nEmail: ${email}\n\nProyecto:\n${msg}`);
+
+                            window.location.href = `mailto:pagottojuanpablo@gmail.com?subject=${subject}&body=${body}`;
+                        }}
+                    >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-3">
                                 <label className="text-sm font-bold text-slate-700 ml-1">Tu Nombre</label>
-                                <input type="text" className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Ej: Juan Pérez" />
+                                <input name="userName" type="text" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Ej: Juan Pérez" />
                             </div>
                             <div className="space-y-3">
                                 <label className="text-sm font-bold text-slate-700 ml-1">WhatsApp</label>
-                                <input type="tel" className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="+54 9 11 ..." />
+                                <input name="userWa" type="tel" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="+54 9 11 ..." />
                             </div>
                         </div>
                         <div className="space-y-3">
                             <label className="text-sm font-bold text-slate-700 ml-1">Correo Electrónico</label>
-                            <input type="email" className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="hola@ejemplo.com" />
+                            <input name="userEmail" type="email" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="hola@ejemplo.com" />
                         </div>
                         <div className="space-y-3">
                             <label className="text-sm font-bold text-slate-700 ml-1">Cuéntanos sobre tu proyecto</label>
-                            <textarea rows="4" className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Arcade, Canchas, Vending..."></textarea>
+                            <textarea name="userMsg" rows="4" required className="w-full bg-slate-50 border-slate-100 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-300" placeholder="Arcade, Canchas, Vending..."></textarea>
                         </div>
                         <button type="submit" className="w-full bg-primary hover:bg-green-800 text-white font-bold py-5 rounded-2xl shadow-xl shadow-green-900/10 transition-all hover:scale-[1.01] active:scale-95 text-lg">
                             Solicitar Asesoramiento Gratuito

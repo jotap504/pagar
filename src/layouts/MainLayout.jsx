@@ -42,9 +42,11 @@ const MainLayout = () => {
                         <div className="flex items-center gap-3">
                             <img src="/landing_assets/Plogoheader.png" alt="Pag.ar" className={`h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition ${isLogin ? 'invert' : ''}`} />
                         </div>
-                        <p className={`${isLogin ? 'text-slate-600' : 'text-slate-400'} text-sm`}>© {new Date().getFullYear()} Pagar IoT Solutions. Todos los derechos reservados.</p>
-                        <div className="flex gap-6">
-                            {/* Social icons can go here */}
+                        <div className="flex flex-col gap-2 text-center md:text-right">
+                            <p className={`${isLogin ? 'text-slate-600' : 'text-slate-400'} text-sm`}>© 2023 Pag.ar soluciones tecnologicas en plataformas de pago digitales</p>
+                            <p className={`${isLogin ? 'text-slate-600' : 'text-slate-400'} text-xs`}>
+                                WhatsApp: 1164045074 | Dirección: Virgilio 2381*1 CABA Argentina
+                            </p>
                         </div>
                     </div>
                 </div>
